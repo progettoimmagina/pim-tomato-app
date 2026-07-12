@@ -1,0 +1,12 @@
+{
+  "name": "pim-tomato-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PIM Tomato — app Mac (guscio nativo del planner)",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
