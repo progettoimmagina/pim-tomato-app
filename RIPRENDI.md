@@ -51,6 +51,16 @@ App Mac nativa che fa da **guscio** al planner PIM Tomato (WordPress su studio.p
 4. Aprire link esterni (es. "apri in ClickUp") nel browser di sistema, non dentro l'app.
 5. Versionamento con release.sh dedicato (o script Tauri) quando parte l'auto-update.
 
+## AUTO-UPDATE (2026-07-12, app v0.2.0)
+- Plugin `tauri-plugin-updater` aggiunto; controllo all'avvio in `lib.rs` (check→download→install→restart, silenzioso).
+- `tauri.conf.json`: `bundle.createUpdaterArtifacts:true` + blocco `plugins.updater` (endpoint `https://github.com/progettoimmagina/pim-tomato-app/releases/latest/download/latest.json` + pubkey).
+- Chiave di firma updater: `~/.tauri/pimtomato_updater.key` (+ `.pub`); backup nel **Keychain** (`pimtomato-updater` / `pimtomato-updater-key`). SENZA password.
+- Link esterni: evento `pt-open` → `open_external()` in Rust apre ClickUp (deep-link `clickup://`) se installata, altrimenti browser. Il planner (v0.7.11) emette `pt-open` per ogni link esterno (delegato click in `collaboratore.js`).
+- Build firmata: `TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/pimtomato_updater.key) TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" npx tauri build` → produce `PIM Tomato.app.tar.gz` + `.sig` + dmg.
+- Release script: `build-tools/app-release.sh <ver> "titolo"` (bump→build firmata→latest.json→push→gh release).
+- Artefatti v0.2.0 già pronti in `dist-release/` + `latest.json`. Installer: `PIM Tomato 0.2.0.dmg` (root).
+- ⏳ **BLOCCO**: il PAT `gh` NON può creare repo (`createRepository` negato). Serve creare a mano il repo **pubblico** `progettoimmagina/pim-tomato-app` (vuoto, no README). Poi: `git remote add origin … && git push -u origin main --tags` + `gh release create v0.2.0 …` (o rilanciare app-release.sh). Endpoint updater legge l'ultima release.
+
 ## Comando per ricostruire
 ```
 cd "/Users/niccolofalaschi/Documents/Claude app/pim-tomato-app" && source "$HOME/.cargo/env" && npx tauri build
