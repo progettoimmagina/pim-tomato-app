@@ -118,8 +118,26 @@ pub fn run() {
                 open_external(event.payload());
             });
 
+            // La X rossa NON chiude l'app: nasconde solo la finestra, così tray,
+            // timer e badge restano vivi. Per uscire davvero: Cmd+Q o tray "Esci".
+            if let Some(win) = app.get_webview_window("main") {
+                let w = win.clone();
+                win.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                });
+            }
+
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("errore nell'avvio di PIM Tomato");
+        .build(tauri::generate_context!())
+        .expect("errore nell'avvio di PIM Tomato")
+        .run(|app, event| {
+            // Clic sull'icona nel Dock quando la finestra è nascosta → la riapre.
+            if let tauri::RunEvent::Reopen { .. } = event {
+                show_main(app);
+            }
+        });
 }
