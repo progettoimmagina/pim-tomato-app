@@ -13,6 +13,9 @@ static PINNED: AtomicBool = AtomicBool::new(false);
 /// finestrella SOLO quando la giornata parte (fronte), non a ogni secondo
 /// (altrimenti riappare subito dopo che l'utente l'ha chiusa).
 static WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// Ignora il blur per un attimo dopo aver mostrato il box, altrimenti la
+/// finestrella non fissata si richiude all'istante appena appare.
+static SUPPRESS_BLUR: AtomicBool = AtomicBool::new(false);
 
 /// Mostra e mette a fuoco la finestra principale del planner.
 fn show_main(app: &tauri::AppHandle) {
@@ -43,6 +46,23 @@ fn show_timer(app: &tauri::AppHandle) {
         place_timer(&w);
         let _ = w.show();
         let _ = w.set_focus();
+        // finestra di grazia: per 600 ms non richiudere su blur (evita il flicker)
+        SUPPRESS_BLUR.store(true, Ordering::SeqCst);
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(600));
+            SUPPRESS_BLUR.store(false, Ordering::SeqCst);
+        });
+    }
+}
+
+/// Clic sull'icona del tray: se il box è aperto lo chiude, altrimenti lo apre.
+fn toggle_timer(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("timer") {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+        } else {
+            show_timer(app);
+        }
     }
 }
 
@@ -140,7 +160,7 @@ pub fn run() {
             let tw_blur = timer_win.clone();
             timer_win.on_window_event(move |event| {
                 if let tauri::WindowEvent::Focused(false) = event {
-                    if !PINNED.load(Ordering::SeqCst) {
+                    if !PINNED.load(Ordering::SeqCst) && !SUPPRESS_BLUR.load(Ordering::SeqCst) {
                         let _ = tw_blur.hide();
                     }
                 }
@@ -168,7 +188,7 @@ pub fn run() {
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                        show_timer(tray.app_handle());
+                        toggle_timer(tray.app_handle());
                     }
                 })
                 .build(app)?;
