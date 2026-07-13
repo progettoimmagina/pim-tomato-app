@@ -241,6 +241,9 @@ pub fn run() {
                         }
                     } else {
                         WAS_ACTIVE.store(false, Ordering::SeqCst);
+                        // niente giornata attiva: via il countdown dal tray e nascondi il box
+                        if let Some(tray) = h_timer.tray_by_id("tray") { let _ = tray.set_title(None::<String>); }
+                        if let Some(w) = h_timer.get_webview_window("timer") { let _ = w.hide(); }
                     }
                     let _ = h_timer.emit_to("timer", "pt-state", v);
                 }

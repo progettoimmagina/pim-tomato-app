@@ -1,6 +1,6 @@
 [package]
 name = "pim-tomato-app"
-version = "0.2.9"
+version = "0.2.10"
 description = "PIM Tomato"
 authors = ["Progetto Immagina"]
 edition = "2021"
