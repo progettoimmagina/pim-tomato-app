@@ -5,7 +5,7 @@
   :root{--bg:#1f1e1d;--cyan:#00ffe3;--ink:#0c3b37;--mut:rgba(255,255,255,.55)}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
   html,body{background:transparent;font-family:-apple-system,"Metropolis",Segoe UI,sans-serif;overflow:hidden}
-  #box{position:relative;border-radius:15px;padding:10px 12px 11px;color:#fff;box-shadow:0 12px 32px rgba(0,0,0,.42);
+  #box{position:relative;margin:6px;border-radius:15px;padding:10px 12px 11px;color:#fff;box-shadow:0 10px 28px rgba(0,0,0,.42);
     background:linear-gradient(var(--bg),var(--bg)) padding-box,linear-gradient(135deg,#00ffe3,#00b6a2 55%,#008987) border-box;
     border:1.6px solid transparent}
   #box.brk{background:var(--cyan);color:var(--ink)}
@@ -23,8 +23,11 @@
   .path .tp-client{color:var(--cyan);font-weight:700}
   .path .tp-sep{margin:0 6px;color:rgba(255,255,255,.3)}
   .row{display:flex;align-items:center;gap:7px;margin-top:9px}
-  .clock{flex:1;font-size:22px;font-weight:800;color:var(--cyan);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .ccol{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .clock{font-size:22px;font-weight:800;color:var(--cyan);font-variant-numeric:tabular-nums;letter-spacing:.01em;line-height:1}
   .paused .clock{color:var(--mut)}
+  .skip{align-self:flex-start;font-size:9px;font-weight:800;color:#f0b330;background:rgba(240,179,48,.16);border-radius:6px;padding:2px 6px;font-variant-numeric:tabular-nums}
+  #box.brk .skip{color:#8a5a00;background:rgba(12,59,55,.12)}
   .b{border:none;border-radius:9px;font-weight:800;font-size:12px;cursor:pointer;padding:8px 12px;white-space:nowrap}
   .fin{background:var(--cyan);color:var(--ink)}
   .pau{background:rgba(255,255,255,.12);color:#fff;padding:8px 9px;display:flex;align-items:center}
@@ -48,7 +51,10 @@
     <div class="task" id="task">—</div>
     <div class="path" id="path"></div>
     <div class="row">
-      <span class="clock" id="clock">0:00:00</span>
+      <div class="ccol">
+        <span class="clock" id="clock">0:00:00</span>
+        <span class="skip hide" id="skip"></span>
+      </div>
       <button class="b fin" id="fin">✓ finito</button>
       <button class="b pau" id="pau" title="Pausa"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
     </div>
@@ -82,6 +88,9 @@
     $('task').textContent=st.task||'—';
     $('path').innerHTML=st.path||'';
     box.classList.toggle('paused',!!st.paused);
+    var sk=Math.round(st.skipped||0);
+    if(sk>0){$('skip').textContent=hms(sk)+' saltati'}
+    sh($('skip'),sk>0);
     tick();
   }
   function tick(){
