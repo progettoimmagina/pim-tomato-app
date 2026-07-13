@@ -39,19 +39,27 @@ fn place_timer(win: &tauri::WebviewWindow) {
 }
 
 /// Mostra la finestrella-timer staccata, applicando lo stato pin.
+/// IMPORTANTE: quando è FISSATA non prende il focus (non attiva l'app), così
+/// puoi continuare a scrivere nelle altre app; galleggia solo sopra.
 fn show_timer(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("timer") {
         let pinned = PINNED.load(Ordering::SeqCst);
         let _ = w.set_always_on_top(pinned);
         place_timer(&w);
-        let _ = w.show();
-        let _ = w.set_focus();
-        // finestra di grazia: per 600 ms non richiudere su blur (evita il flicker)
-        SUPPRESS_BLUR.store(true, Ordering::SeqCst);
-        std::thread::spawn(|| {
-            std::thread::sleep(std::time::Duration::from_millis(600));
-            SUPPRESS_BLUR.store(false, Ordering::SeqCst);
-        });
+        let already = w.is_visible().unwrap_or(false);
+        if !already {
+            let _ = w.show();
+        }
+        // Il focus serve SOLO al box non-fissato (per nascondersi al blur). Il box
+        // fissato non va mai messo a fuoco, altrimenti ruba l'attivazione.
+        if !pinned && !already {
+            let _ = w.set_focus();
+            SUPPRESS_BLUR.store(true, Ordering::SeqCst);
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_millis(600));
+                SUPPRESS_BLUR.store(false, Ordering::SeqCst);
+            });
+        }
     }
 }
 
@@ -237,8 +245,8 @@ pub fn run() {
                             if let Some(w) = h_act.get_webview_window("timer") {
                                 let _ = w.set_always_on_top(on);
                                 place_timer(&w);
-                                let _ = w.show();
-                                let _ = w.set_focus();
+                                if !w.is_visible().unwrap_or(false) { let _ = w.show(); }
+                                // niente set_focus: il box fissato non ruba l'attivazione
                             }
                         }
                         _ => {}
