@@ -18,12 +18,22 @@ static WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
 static SUPPRESS_BLUR: AtomicBool = AtomicBool::new(false);
 
 /// Mostra e mette a fuoco la finestra principale del planner.
+/// Aprendo il planner, il box-timer in alto a destra sparisce (si usa la barra
+/// in basso). L'app si apre SOLO da qui (Dock o freccia del box), mai dai tasti.
 fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
     }
+    if let Some(t) = app.get_webview_window("timer") {
+        let _ = t.hide();
+    }
+}
+
+/// Il planner (finestra main) è a schermo?
+fn main_visible(app: &tauri::AppHandle) -> bool {
+    app.get_webview_window("main").and_then(|w| w.is_visible().ok()).unwrap_or(true)
 }
 
 /// Posiziona la finestrella in alto a destra: un filo più in basso se fissata,
@@ -42,6 +52,10 @@ fn place_timer(win: &tauri::WebviewWindow) {
 /// IMPORTANTE: quando è FISSATA non prende il focus (non attiva l'app), così
 /// puoi continuare a scrivere nelle altre app; galleggia solo sopra.
 fn show_timer(app: &tauri::AppHandle) {
+    // se il planner è a schermo, niente box (la barra in basso basta)
+    if main_visible(app) {
+        return;
+    }
     if let Some(w) = app.get_webview_window("timer") {
         let pinned = PINNED.load(Ordering::SeqCst);
         let _ = w.set_always_on_top(pinned);
@@ -160,6 +174,7 @@ pub fn run() {
                 .decorations(false)
                 .transparent(true)
                 .always_on_top(false)
+                .shadow(false)
                 .skip_taskbar(true)
                 .visible(false)
                 .build()?;
@@ -239,6 +254,9 @@ pub fn run() {
                         Some("hide") => {
                             if let Some(w) = h_act.get_webview_window("timer") { let _ = w.hide(); }
                         }
+                        Some("open") => {
+                            show_main(&h_act); // freccia: apri il planner e chiudi il box
+                        }
                         Some("pin") => {
                             let on = v.get("on").and_then(|x| x.as_bool()).unwrap_or(false);
                             PINNED.store(on, Ordering::SeqCst);
@@ -258,10 +276,15 @@ pub fn run() {
             // La X rossa del planner NON chiude l'app: nasconde solo la finestra.
             if let Some(win) = app.get_webview_window("main") {
                 let w = win.clone();
+                let h_close = app.handle().clone();
                 win.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = w.hide();
+                        // planner chiuso: se c'è una giornata attiva, mostra il box a destra
+                        if WAS_ACTIVE.load(Ordering::SeqCst) {
+                            show_timer(&h_close);
+                        }
                     }
                 });
             }

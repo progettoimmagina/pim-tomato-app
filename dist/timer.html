@@ -5,7 +5,7 @@
   :root{--bg:#1f1e1d;--cyan:#00ffe3;--ink:#0c3b37;--mut:rgba(255,255,255,.55)}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
   html,body{background:transparent;font-family:-apple-system,"Metropolis",Segoe UI,sans-serif;overflow:hidden}
-  #box{position:relative;margin:6px;border-radius:15px;padding:10px 12px 11px;color:#fff;box-shadow:0 10px 28px rgba(0,0,0,.42);
+  #box{position:relative;margin:8px;border-radius:15px;padding:10px 12px 11px;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);
     background:linear-gradient(var(--bg),var(--bg)) padding-box,linear-gradient(135deg,#00ffe3,#00b6a2 55%,#008987) border-box;
     border:1.6px solid transparent}
   #box.brk{background:var(--cyan);color:var(--ink)}
@@ -45,6 +45,7 @@
   <div class="top" data-tauri-drag-region>
     <span class="ey" id="ey">—</span>
     <button class="hbtn" id="pin" title="Fissa in alto a destra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.8V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v5.8l1.7 2A1 1 0 0 1 16.9 14H7.1a1 1 0 0 1-.8-1.2z"/></svg></button>
+    <button class="hbtn" id="open" title="Apri il planner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg></button>
     <button class="hbtn" id="x" title="Chiudi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <div id="run">
@@ -108,6 +109,7 @@
   $('byes').addEventListener('click',function(){act({a:'break'});$('brktitle').textContent='Perfetto, a dopo!';$('brkbtns').classList.add('hide')});
   $('bno').addEventListener('click',function(){act({a:'next'});mode='run';render()});
   $('x').addEventListener('click',function(){act({a:'hide'})});
+  $('open').addEventListener('click',function(){act({a:'open'})});
   $('pin').addEventListener('click',function(){pinned=!pinned;$('pin').classList.toggle('on',pinned);$('pin').title=pinned?'Sfissa (torna sotto la barra dei menu)':'Fissa in alto a destra';act({a:'pin',on:pinned})});
   render();
 })();
