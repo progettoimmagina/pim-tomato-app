@@ -150,13 +150,16 @@ pub fn run() {
             // PONTE planner → finestrella-timer: lo stato del blocco corrente
             // (task, percorso, scadenza) viaggia alla finestrella, che conta i
             // secondi da sola. Quando c'è un blocco attivo, la finestrella appare.
+            // NB: il nome dell'evento RILANCIATO deve essere DIVERSO da quello
+            // ascoltato, altrimenti il listener si ri-attiva all'infinito (stack
+            // overflow). main→"pt-timer"→relay→"pt-state"; panel→"pt-timer-action"→relay→"pt-cmd".
             let h_timer = app.handle().clone();
             app.listen("pt-timer", move |event| {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(event.payload()) {
                     if v.get("active").and_then(|x| x.as_bool()).unwrap_or(false) {
                         show_timer(&h_timer);
                     }
-                    let _ = h_timer.emit_to("timer", "pt-timer", v);
+                    let _ = h_timer.emit_to("timer", "pt-state", v);
                 }
             });
             // PONTE finestrella → planner: i tasti (finito / pausa / ...) tornano
@@ -167,7 +170,7 @@ pub fn run() {
                     if v.get("a").and_then(|x| x.as_str()) == Some("hide") {
                         if let Some(w) = h_act.get_webview_window("timer") { let _ = w.hide(); }
                     }
-                    let _ = h_act.emit_to("main", "pt-timer-action", v);
+                    let _ = h_act.emit_to("main", "pt-cmd", v);
                 }
             });
 

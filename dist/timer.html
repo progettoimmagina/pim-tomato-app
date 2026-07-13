@@ -87,7 +87,7 @@
     $('bar').style.width=pct+'%';
   }
   setInterval(tick,250);
-  if(ev)ev.listen('pt-timer',function(e){
+  if(ev)ev.listen('pt-state',function(e){
     var d=e.payload||{};
     st=Object.assign(st,d);
     mode='run';
