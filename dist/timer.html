@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PIM Tomato — Timer</title>
+<style>
+  :root{--bg:#1f1e1d;--cyan:#00ffe3;--ink:#0c3b37;--mut:rgba(255,255,255,.55)}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
+  html,body{background:transparent;font-family:-apple-system,"Metropolis",Segoe UI,sans-serif;overflow:hidden}
+  #box{background:var(--bg);color:#fff;border-radius:16px;padding:12px 14px 13px;box-shadow:0 14px 40px rgba(0,0,0,.45);position:relative}
+  #box.brk{background:var(--cyan);color:var(--ink)}
+  .top{display:flex;align-items:flex-start;gap:8px}
+  .ey{font-size:8.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
+  #box.brk .ey{color:rgba(12,59,55,.7)}
+  .drag{flex:1 1 auto;min-height:14px}
+  .xh{width:20px;height:20px;border-radius:6px;border:none;background:rgba(255,255,255,.10);color:#fff;font-size:12px;line-height:1;cursor:pointer;flex:none}
+  #box.brk .xh{background:rgba(12,59,55,.15);color:var(--ink)}
+  .xh:hover{background:rgba(255,255,255,.2)}
+  .task{font-weight:800;font-size:15px;line-height:1.2;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .path{font-size:10px;color:var(--mut);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .path b{color:#fff;font-weight:700}
+  .path .sep{opacity:.4;margin:0 4px}
+  .clockrow{display:flex;align-items:baseline;gap:8px;margin-top:8px}
+  .clock{font-size:26px;font-weight:800;color:var(--cyan);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .paused .clock{color:var(--mut)}
+  .pausetag{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--mut)}
+  .track{height:5px;border-radius:5px;background:rgba(255,255,255,.12);margin-top:8px;overflow:hidden}
+  .track i{display:block;height:100%;background:var(--cyan);width:0%}
+  .btns{display:flex;gap:8px;margin-top:11px}
+  .btn{flex:1;border:none;border-radius:10px;padding:9px;font-weight:800;font-size:13px;cursor:pointer}
+  .fin{background:var(--cyan);color:var(--ink)}
+  .pau{background:rgba(255,255,255,.10);color:#fff}
+  .pau:hover,.fin:hover{filter:brightness(1.06)}
+  #box.brk .brktitle{font-weight:800;font-size:16px}
+  #box.brk .b-yes{background:var(--ink);color:var(--cyan)}
+  #box.brk .b-no{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
+  .idle{color:var(--mut);font-size:12px;text-align:center;padding:6px 0}
+  .hide{display:none}
+</style></head>
+<body>
+<div id="box">
+  <div class="top"><span class="ey" id="ey">—</span><span class="drag" data-tauri-drag-region></span><button class="xh" id="x" title="Nascondi">▁</button></div>
+  <div id="run">
+    <div class="task" id="task">—</div>
+    <div class="path" id="path"></div>
+    <div class="clockrow"><span class="clock" id="clock">00:00:00</span><span class="pausetag hide" id="ptag">in pausa</span></div>
+    <div class="track"><i id="bar"></i></div>
+    <div class="btns">
+      <button class="btn fin" id="fin">✓ finito</button>
+      <button class="btn pau" id="pau">⏸ pausa</button>
+    </div>
+  </div>
+  <div id="brk" class="hide">
+    <div class="brktitle" id="brktitle">Top! ora fai una pausina?</div>
+    <div class="btns" id="brkbtns">
+      <button class="btn b-yes" id="byes">sì</button>
+      <button class="btn b-no" id="bno">no, la prossima</button>
+    </div>
+  </div>
+  <div id="idle" class="idle hide">nessun blocco attivo</div>
+</div>
+<script>
+(function(){
+  var T=window.__TAURI__, ev=T&&T.event, win=T&&T.window;
+  var st={active:false,idx:0,total:0,task:'',path:'',endTs:0,paused:false,remaining:0};
+  var box=document.getElementById('box');
+  function $(id){return document.getElementById(id)}
+  function p2(x){return(x<10?'0':'')+x}
+  function hms(s){s=Math.max(0,Math.floor(s));var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+p2(m)+':'+p2(x)}
+  function show(el,on){el.classList.toggle('hide',!on)}
+  var mode='run'; // run | brk
+  function render(){
+    if(mode==='brk'){show($('run'),false);show($('brk'),true);show($('idle'),false);box.classList.add('brk');return}
+    box.classList.remove('brk');
+    if(!st.active){show($('run'),false);show($('brk'),false);show($('idle'),true);$('ey').textContent='PIM Tomato';return}
+    show($('run'),true);show($('brk'),false);show($('idle'),false);
+    $('ey').textContent='ora lavori su · blocco '+(st.idx+1)+' di '+st.total;
+    $('task').textContent=st.task||'—';
+    $('path').innerHTML=st.path||'';
+    box.classList.toggle('paused',!!st.paused);
+    show($('ptag'),!!st.paused);
+    tick();
+  }
+  function tick(){
+    if(mode!=='run'||!st.active)return;
+    var left=st.paused?st.remaining:(st.endTs-Date.now()/1000);
+    $('clock').textContent=hms(left);
+    var total=st.totalSec||1, pct=Math.min(100,Math.max(0,(total-left)/total*100));
+    $('bar').style.width=pct+'%';
+  }
+  setInterval(tick,250);
+  if(ev)ev.listen('pt-timer',function(e){
+    var d=e.payload||{};
+    st=Object.assign(st,d);
+    mode='run';
+    render();
+  });
+  function act(a){try{ev.emit('pt-timer-action',{a:a})}catch(_){}}
+  $('fin').addEventListener('click',function(){act('finish');mode='brk';render()});
+  $('pau').addEventListener('click',function(){act(st.paused?'resume':'pause')});
+  $('byes').addEventListener('click',function(){act('break');$('brktitle').textContent='Perfetto, a dopo!';$('brkbtns').classList.add('hide')});
+  $('bno').addEventListener('click',function(){act('next');mode='run';render()});
+  $('x').addEventListener('click',function(){try{win.getCurrentWindow().hide()}catch(_){act('hide')}});
+  render();
+})();
+</script>
+</body></html>

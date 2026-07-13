@@ -2,7 +2,7 @@ use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Listener, Manager,
+    Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 /// Mostra e mette a fuoco la finestra principale del planner.
@@ -10,6 +10,14 @@ fn show_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
         let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// Mostra la finestrella-timer staccata (in alto a destra).
+fn show_timer(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("timer") {
+        let _ = w.show();
         let _ = w.set_focus();
     }
 }
@@ -87,10 +95,30 @@ pub fn run() {
                 }
             });
 
+            // Finestrella-timer staccata (in alto a destra, senza bordi, sempre in
+            // primo piano). Vive finché l'app è viva (anche col planner nascosto).
+            let timer_win = WebviewWindowBuilder::new(app, "timer", WebviewUrl::App("timer.html".into()))
+                .title("PIM Tomato Timer")
+                .inner_size(320.0, 182.0)
+                .resizable(false)
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible(false)
+                .build()?;
+            if let Ok(Some(mon)) = timer_win.primary_monitor() {
+                let sz = mon.size();
+                let sf = mon.scale_factor();
+                let lw = sz.width as f64 / sf;
+                let _ = timer_win.set_position(tauri::LogicalPosition::new(lw - 320.0 - 16.0, 40.0));
+            }
+
             // Menù del tray
             let open_i = MenuItem::with_id(app, "open", "Apri PIM Tomato", true, None::<&str>)?;
+            let timer_i = MenuItem::with_id(app, "timer", "Mostra timer", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Esci", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&open_i, &timer_i, &quit_i])?;
 
             // Icona 🍅 MONOCROMATICA (template) come le altre della barra dei menu
             let tray_icon = Image::from_bytes(include_bytes!("../icons/tray.png"))?;
@@ -101,6 +129,7 @@ pub fn run() {
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
+                    "timer" => show_timer(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -116,6 +145,30 @@ pub fn run() {
             // app ClickUp se installata, altrimenti browser.
             app.listen("pt-open", move |event| {
                 open_external(event.payload());
+            });
+
+            // PONTE planner → finestrella-timer: lo stato del blocco corrente
+            // (task, percorso, scadenza) viaggia alla finestrella, che conta i
+            // secondi da sola. Quando c'è un blocco attivo, la finestrella appare.
+            let h_timer = app.handle().clone();
+            app.listen("pt-timer", move |event| {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(event.payload()) {
+                    if v.get("active").and_then(|x| x.as_bool()).unwrap_or(false) {
+                        show_timer(&h_timer);
+                    }
+                    let _ = h_timer.emit_to("timer", "pt-timer", v);
+                }
+            });
+            // PONTE finestrella → planner: i tasti (finito / pausa / ...) tornano
+            // al planner che agisce sul focus. "hide" nasconde la finestrella.
+            let h_act = app.handle().clone();
+            app.listen("pt-timer-action", move |event| {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(event.payload()) {
+                    if v.get("a").and_then(|x| x.as_str()) == Some("hide") {
+                        if let Some(w) = h_act.get_webview_window("timer") { let _ = w.hide(); }
+                    }
+                    let _ = h_act.emit_to("main", "pt-timer-action", v);
+                }
             });
 
             // La X rossa NON chiude l'app: nasconde solo la finestra, così tray,
