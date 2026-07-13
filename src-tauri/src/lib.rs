@@ -1,9 +1,18 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder,
 };
+
+/// Timer "fissato" (pin): resta in alto a destra sopra tutto. Se falso, il box
+/// vive sotto la barra dei menu e si nasconde quando perde il focus.
+static PINNED: AtomicBool = AtomicBool::new(false);
+/// C'era già un blocco attivo al tick precedente? Serve a mostrare la
+/// finestrella SOLO quando la giornata parte (fronte), non a ogni secondo
+/// (altrimenti riappare subito dopo che l'utente l'ha chiusa).
+static WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Mostra e mette a fuoco la finestra principale del planner.
 fn show_main(app: &tauri::AppHandle) {
@@ -14,26 +23,46 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
-/// Mostra la finestrella-timer staccata (in alto a destra).
+/// Posiziona la finestrella in alto a destra: un filo più in basso se fissata,
+/// attaccata alla barra dei menu se non fissata.
+fn place_timer(win: &tauri::WebviewWindow) {
+    if let Ok(Some(mon)) = win.primary_monitor() {
+        let sz = mon.size();
+        let sf = mon.scale_factor();
+        let lw = sz.width as f64 / sf;
+        let y = if PINNED.load(Ordering::SeqCst) { 42.0 } else { 30.0 };
+        let _ = win.set_position(tauri::LogicalPosition::new(lw - 300.0 - 14.0, y));
+    }
+}
+
+/// Mostra la finestrella-timer staccata, applicando lo stato pin.
 fn show_timer(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("timer") {
+        let pinned = PINNED.load(Ordering::SeqCst);
+        let _ = w.set_always_on_top(pinned);
+        place_timer(&w);
         let _ = w.show();
         let _ = w.set_focus();
     }
 }
 
 /// Applica gli aggiornamenti richiesti dal planner (evento "pt-app"):
-/// { "title": "01:59", "visible": true, "badge": 3 }. Ogni campo è opzionale
-/// e viene applicato solo se presente.
+/// { "title": "01:59", "visible": true, "badge": 3 }. Il countdown nel tray si
+/// mostra SOLO quando la finestrella-timer è chiusa (icona e timer si scambiano).
 fn apply_pt(app: &tauri::AppHandle, payload: &str) {
     let v: serde_json::Value = match serde_json::from_str(payload) {
         Ok(v) => v,
         Err(_) => return,
     };
+    let box_vis = app
+        .get_webview_window("timer")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
     if let Some(tray) = app.tray_by_id("tray") {
         if let Some(t) = v.get("title") {
             let title = t.as_str().unwrap_or("");
-            let _ = tray.set_title(if title.is_empty() { None } else { Some(title.to_string()) });
+            let show = if box_vis || title.is_empty() { None } else { Some(title.to_string()) };
+            let _ = tray.set_title(show);
         }
         if let Some(vis) = v.get("visible").and_then(|x| x.as_bool()) {
             let _ = tray.set_visible(vis);
@@ -48,9 +77,8 @@ fn apply_pt(app: &tauri::AppHandle, payload: &str) {
 }
 
 /// Apre un link ESTERNO col comportamento "app ClickUp se installata, altrimenti
-/// browser". Per gli URL app.clickup.com prova prima il deep-link clickup://
-/// (apre l'app desktop di ClickUp); se nessun gestore è registrato, ripiega
-/// sull'URL https nel browser di sistema. Gli altri link vanno al browser.
+/// browser". Per gli URL app.clickup.com prova prima il deep-link clickup://;
+/// se nessun gestore è registrato, ripiega sull'URL https nel browser.
 fn open_external(payload: &str) {
     let v: serde_json::Value = match serde_json::from_str(payload) {
         Ok(v) => v,
@@ -95,43 +123,53 @@ pub fn run() {
                 }
             });
 
-            // Finestrella-timer staccata (in alto a destra, senza bordi, sempre in
-            // primo piano). Vive finché l'app è viva (anche col planner nascosto).
+            // Finestrella-timer staccata (senza bordi, trasparente). Di default
+            // NON fissata: vive sotto la barra dei menu e si nasconde su blur.
             let timer_win = WebviewWindowBuilder::new(app, "timer", WebviewUrl::App("timer.html".into()))
                 .title("PIM Tomato Timer")
-                .inner_size(320.0, 182.0)
+                .inner_size(300.0, 150.0)
                 .resizable(false)
                 .decorations(false)
                 .transparent(true)
-                .always_on_top(true)
+                .always_on_top(false)
                 .skip_taskbar(true)
                 .visible(false)
                 .build()?;
-            if let Ok(Some(mon)) = timer_win.primary_monitor() {
-                let sz = mon.size();
-                let sf = mon.scale_factor();
-                let lw = sz.width as f64 / sf;
-                let _ = timer_win.set_position(tauri::LogicalPosition::new(lw - 320.0 - 16.0, 40.0));
-            }
+            place_timer(&timer_win);
+            // Non fissata + focus perso → si nasconde (torna nel tray il countdown).
+            let tw_blur = timer_win.clone();
+            timer_win.on_window_event(move |event| {
+                if let tauri::WindowEvent::Focused(false) = event {
+                    if !PINNED.load(Ordering::SeqCst) {
+                        let _ = tw_blur.hide();
+                    }
+                }
+            });
 
-            // Menù del tray
+            // Menù del tray (clic destro)
             let open_i = MenuItem::with_id(app, "open", "Apri PIM Tomato", true, None::<&str>)?;
             let timer_i = MenuItem::with_id(app, "timer", "Mostra timer", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Esci", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open_i, &timer_i, &quit_i])?;
 
-            // Icona 🍅 MONOCROMATICA (template) come le altre della barra dei menu
+            // Icona 🍅 MONOCROMATICA (template). Clic SINISTRO = mostra il box timer.
             let tray_icon = Image::from_bytes(include_bytes!("../icons/tray.png"))?;
             let _tray = TrayIconBuilder::with_id("tray")
                 .icon(tray_icon)
                 .icon_as_template(true)
                 .tooltip("PIM Tomato")
                 .menu(&menu)
+                .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
                     "timer" => show_timer(app),
                     "quit" => app.exit(0),
                     _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        show_timer(tray.app_handle());
+                    }
                 })
                 .build(app)?;
 
@@ -141,41 +179,55 @@ pub fn run() {
                 apply_pt(&handle, event.payload());
             });
 
-            // Apertura link esterni (es. "apri in ClickUp") fuori dalla finestra:
-            // app ClickUp se installata, altrimenti browser.
+            // Apertura link esterni (es. "apri in ClickUp") fuori dalla finestra.
             app.listen("pt-open", move |event| {
                 open_external(event.payload());
             });
 
-            // PONTE planner → finestrella-timer: lo stato del blocco corrente
-            // (task, percorso, scadenza) viaggia alla finestrella, che conta i
-            // secondi da sola. Quando c'è un blocco attivo, la finestrella appare.
-            // NB: il nome dell'evento RILANCIATO deve essere DIVERSO da quello
-            // ascoltato, altrimenti il listener si ri-attiva all'infinito (stack
-            // overflow). main→"pt-timer"→relay→"pt-state"; panel→"pt-timer-action"→relay→"pt-cmd".
+            // PONTE planner → finestrella-timer. NB: l'evento RILANCIATO ha nome
+            // DIVERSO (pt-state) da quello ascoltato (pt-timer), altrimenti loop
+            // infinito. La finestrella appare SOLO quando la giornata parte
+            // (fronte attivo), non a ogni tick.
             let h_timer = app.handle().clone();
             app.listen("pt-timer", move |event| {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(event.payload()) {
-                    if v.get("active").and_then(|x| x.as_bool()).unwrap_or(false) {
-                        show_timer(&h_timer);
+                    let active = v.get("active").and_then(|x| x.as_bool()).unwrap_or(false);
+                    if active {
+                        if !WAS_ACTIVE.swap(true, Ordering::SeqCst) {
+                            show_timer(&h_timer);
+                        }
+                    } else {
+                        WAS_ACTIVE.store(false, Ordering::SeqCst);
                     }
                     let _ = h_timer.emit_to("timer", "pt-state", v);
                 }
             });
-            // PONTE finestrella → planner: i tasti (finito / pausa / ...) tornano
-            // al planner che agisce sul focus. "hide" nasconde la finestrella.
+            // PONTE finestrella → planner: hide/pin gestiti qui; finito/pausa
+            // rilanciati al planner come "pt-cmd".
             let h_act = app.handle().clone();
             app.listen("pt-timer-action", move |event| {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(event.payload()) {
-                    if v.get("a").and_then(|x| x.as_str()) == Some("hide") {
-                        if let Some(w) = h_act.get_webview_window("timer") { let _ = w.hide(); }
+                    match v.get("a").and_then(|x| x.as_str()) {
+                        Some("hide") => {
+                            if let Some(w) = h_act.get_webview_window("timer") { let _ = w.hide(); }
+                        }
+                        Some("pin") => {
+                            let on = v.get("on").and_then(|x| x.as_bool()).unwrap_or(false);
+                            PINNED.store(on, Ordering::SeqCst);
+                            if let Some(w) = h_act.get_webview_window("timer") {
+                                let _ = w.set_always_on_top(on);
+                                place_timer(&w);
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        _ => {}
                     }
                     let _ = h_act.emit_to("main", "pt-cmd", v);
                 }
             });
 
-            // La X rossa NON chiude l'app: nasconde solo la finestra, così tray,
-            // timer e badge restano vivi. Per uscire davvero: Cmd+Q o tray "Esci".
+            // La X rossa del planner NON chiude l'app: nasconde solo la finestra.
             if let Some(win) = app.get_webview_window("main") {
                 let w = win.clone();
                 win.on_window_event(move |event| {
@@ -191,7 +243,6 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("errore nell'avvio di PIM Tomato")
         .run(|app, event| {
-            // Clic sull'icona nel Dock quando la finestra è nascosta → la riapre.
             if let tauri::RunEvent::Reopen { .. } = event {
                 show_main(app);
             }
