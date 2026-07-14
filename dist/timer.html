@@ -5,7 +5,7 @@
   :root{--bg:#1f1e1d;--cyan:#00ffe3;--ink:#0c3b37;--mut:rgba(255,255,255,.55)}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
   html,body{background:transparent;font-family:-apple-system,"Metropolis",Segoe UI,sans-serif;overflow:hidden}
-  #box{position:relative;margin:16px 20px;border-radius:15px;padding:10px 12px 11px;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);
+  #box{position:relative;width:290px;margin:16px 22px 30px 22px;border-radius:15px;padding:10px 12px 11px;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);
     background:linear-gradient(var(--bg),var(--bg)) padding-box,linear-gradient(135deg,#00ffe3,#00b6a2 55%,#008987) border-box;
     border:1.6px solid transparent}
   #box.brk{background:var(--cyan);color:var(--ink)}
@@ -81,9 +81,9 @@
   function hms(s){s=Math.max(0,Math.floor(s));var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+p2(m)+':'+p2(x)}
   function sh(el,on){el.classList.toggle('hide',!on)}
   function render(){
-    if(mode==='brk'){sh($('run'),false);sh($('brk'),true);sh($('idle'),false);box.classList.add('brk');return}
+    if(mode==='brk'){sh($('run'),false);sh($('brk'),true);sh($('idle'),false);box.classList.add('brk');fit();return}
     box.classList.remove('brk');
-    if(!st.active){sh($('run'),false);sh($('brk'),false);sh($('idle'),true);$('ey').textContent='PIM Tomato';return}
+    if(!st.active){sh($('run'),false);sh($('brk'),false);sh($('idle'),true);$('ey').textContent='PIM Tomato';fit();return}
     sh($('run'),true);sh($('brk'),false);sh($('idle'),false);
     $('ey').textContent='ora lavori su · blocco '+(st.idx+1)+' di '+st.total;
     $('task').textContent=st.task||'—';
@@ -92,7 +92,7 @@
     var sk=Math.round(st.skipped||0);
     if(sk>0){$('skip').textContent=hms(sk)+' saltati'}
     sh($('skip'),sk>0);
-    tick();
+    tick();fit();
   }
   function tick(){
     if(mode!=='run'||!st.active)return;
@@ -104,6 +104,18 @@
   setInterval(tick,250);
   if(ev)ev.listen('pt-state',function(e){st=Object.assign(st,e.payload||{});mode='run';render();});
   function act(o){try{ev.emit('pt-timer-action',o)}catch(_){}}
+  /* dimensiona la finestra sull'ALTEZZA REALE del box (misurata dal layout)
+     + i margini trasparenti che contengono l'ombra: mai tagliata, per qualsiasi
+     contenuto (run / pausa / idle). 16px sopra + 30px sotto = margini CSS del box. */
+  var lastH=0;
+  function fit(){
+    if(!ev)return;
+    requestAnimationFrame(function(){
+      var h=box.offsetHeight+16+30;
+      if(h===lastH)return; lastH=h;
+      try{ev.emit('pt-timer-action',{a:'resize',h:h})}catch(_){}
+    });
+  }
   $('fin').addEventListener('click',function(){act({a:'finish'});mode='brk';render()});
   $('pau').addEventListener('click',function(){act({a:st.paused?'resume':'pause'})});
   $('byes').addEventListener('click',function(){act({a:'break'});$('brktitle').textContent='Perfetto, a dopo!';$('brkbtns').classList.add('hide')});

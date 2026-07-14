@@ -256,6 +256,17 @@ pub fn run() {
             app.listen("pt-timer-action", move |event| {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(event.payload()) {
                     match v.get("a").and_then(|x| x.as_str()) {
+                        Some("resize") => {
+                            // la finestrella si adatta all'altezza reale del box
+                            // (misurata dal layout) così l'ombra non viene mai tagliata
+                            if let (Some(w), Some(hh)) = (
+                                h_act.get_webview_window("timer"),
+                                v.get("h").and_then(|x| x.as_f64()),
+                            ) {
+                                let _ = w.set_size(tauri::LogicalSize::new(334.0, hh));
+                                place_timer(&w);
+                            }
+                        }
                         Some("hide") => {
                             if let Some(w) = h_act.get_webview_window("timer") { let _ = w.hide(); }
                         }
