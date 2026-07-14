@@ -43,8 +43,10 @@ fn place_timer(win: &tauri::WebviewWindow) {
         let sz = mon.size();
         let sf = mon.scale_factor();
         let lw = sz.width as f64 / sf;
-        let y = if PINNED.load(Ordering::SeqCst) { 38.0 } else { 26.0 };
-        let _ = win.set_position(tauri::LogicalPosition::new(lw - 314.0 - 10.0, y));
+        // il box ha 16px di margine sopra: alzo la finestra così il box resta
+        // dove stava; il margine trasparente attorno serve a NON tagliare l'ombra
+        let y = if PINNED.load(Ordering::SeqCst) { 24.0 } else { 12.0 };
+        let _ = win.set_position(tauri::LogicalPosition::new(lw - 334.0 + 6.0, y));
     }
 }
 
@@ -169,7 +171,7 @@ pub fn run() {
             // NON fissata: vive sotto la barra dei menu e si nasconde su blur.
             let timer_win = WebviewWindowBuilder::new(app, "timer", WebviewUrl::App("timer.html".into()))
                 .title("PIM Tomato Timer")
-                .inner_size(314.0, 164.0)
+                .inner_size(334.0, 192.0)
                 .resizable(false)
                 .decorations(false)
                 .transparent(true)
