@@ -99,8 +99,14 @@ fn show_notif_box(app: &tauri::AppHandle, payload: &str) {
     }
 }
 
-/// Clic sull'icona del tray: se il box è aperto lo chiude, altrimenti lo apre.
+/// Clic sull'icona del tray:
+/// - se NON c'è un timer attivo → apre direttamente il planner (niente box vuoto);
+/// - se c'è un timer attivo → interruttore sul box (aperto lo chiude, chiuso lo apre).
 fn toggle_timer(app: &tauri::AppHandle) {
+    if !WAS_ACTIVE.load(Ordering::SeqCst) {
+        show_main(app);
+        return;
+    }
     if let Some(w) = app.get_webview_window("timer") {
         if w.is_visible().unwrap_or(false) {
             let _ = w.hide();
