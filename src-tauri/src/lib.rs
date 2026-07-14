@@ -16,6 +16,9 @@ static WAS_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Ignora il blur per un attimo dopo aver mostrato il box, altrimenti la
 /// finestrella non fissata si richiude all'istante appena appare.
 static SUPPRESS_BLUR: AtomicBool = AtomicBool::new(false);
+/// C'è una NOTIFICA (promemoria) a schermo nel box: in tal caso il box non va
+/// nascosto dai normali segnali del timer finché l'utente non fa "Ho capito".
+static NOTIF_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// Mostra e mette a fuoco la finestra principale del planner.
 /// Aprendo il planner, il box-timer in alto a destra sparisce (si usa la barra
@@ -75,6 +78,23 @@ fn show_timer(app: &tauri::AppHandle) {
                 std::thread::sleep(std::time::Duration::from_millis(600));
                 SUPPRESS_BLUR.store(false, Ordering::SeqCst);
             });
+        }
+    }
+}
+
+/// Mostra il box in modalità NOTIFICA (promemoria): appare in alto a destra
+/// SEMPRE, anche se il planner è aperto — è una notifica, deve galleggiare
+/// sopra tutto. Non ruba il focus (così puoi continuare a lavorare).
+fn show_notif_box(app: &tauri::AppHandle, payload: &str) {
+    NOTIF_ACTIVE.store(true, Ordering::SeqCst);
+    if let Some(w) = app.get_webview_window("timer") {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(payload) {
+            let _ = w.emit_to("timer", "pt-notify", v);
+        }
+        place_timer(&w);
+        let _ = w.set_always_on_top(true);
+        if !w.is_visible().unwrap_or(false) {
+            let _ = w.show();
         }
     }
 }
@@ -229,6 +249,13 @@ pub fn run() {
                 open_external(event.payload());
             });
 
+            // Notifiche (promemoria di fine blocco / pausetta): il planner le manda
+            // qui e compaiono nel box in alto a destra, fuori dall'app.
+            let h_notif = app.handle().clone();
+            app.listen("pt-notif", move |event| {
+                show_notif_box(&h_notif, event.payload());
+            });
+
             // PONTE planner → finestrella-timer. NB: l'evento RILANCIATO ha nome
             // DIVERSO (pt-state) da quello ascoltato (pt-timer), altrimenti loop
             // infinito. La finestrella appare SOLO quando la giornata parte
@@ -245,7 +272,10 @@ pub fn run() {
                         WAS_ACTIVE.store(false, Ordering::SeqCst);
                         // niente giornata attiva: via il countdown dal tray e nascondi il box
                         if let Some(tray) = h_timer.tray_by_id("tray") { let _ = tray.set_title(None::<String>); }
-                        if let Some(w) = h_timer.get_webview_window("timer") { let _ = w.hide(); }
+                        // MA non nasconderlo se sta mostrando una notifica: resta finché "Ho capito"
+                        if !NOTIF_ACTIVE.load(Ordering::SeqCst) {
+                            if let Some(w) = h_timer.get_webview_window("timer") { let _ = w.hide(); }
+                        }
                     }
                     let _ = h_timer.emit_to("timer", "pt-state", v);
                 }
@@ -265,6 +295,18 @@ pub fn run() {
                             ) {
                                 let _ = w.set_size(tauri::LogicalSize::new(334.0, hh));
                                 place_timer(&w);
+                            }
+                        }
+                        Some("notif-close") => {
+                            // "Ho capito": chiudo la notifica. Ripristino l'always-on-top
+                            // allo stato pin e nascondo il box se il planner è aperto o
+                            // non c'è più un timer attivo; altrimenti torna a mostrare il timer.
+                            NOTIF_ACTIVE.store(false, Ordering::SeqCst);
+                            if let Some(w) = h_act.get_webview_window("timer") {
+                                let _ = w.set_always_on_top(PINNED.load(Ordering::SeqCst));
+                                if main_visible(&h_act) || !WAS_ACTIVE.load(Ordering::SeqCst) {
+                                    let _ = w.hide();
+                                }
                             }
                         }
                         Some("hide") => {

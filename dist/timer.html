@@ -38,6 +38,12 @@
   .b-yes{background:var(--ink);color:var(--cyan)}
   .b-no{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
   .idle{color:var(--mut);font-size:11px;text-align:center;padding:9px 0 4px}
+  /* modalità notifica (stesso formato del box) */
+  #notif{text-align:center;padding:4px 2px 2px}
+  .nemoji{font-size:30px;line-height:1;margin:4px 0 8px}
+  .ntitle{font-weight:800;font-size:17px;color:#fff}
+  .nsub{font-size:12px;color:var(--mut);margin-top:4px}
+  .nok{display:block;width:100%;margin-top:12px;background:var(--cyan);color:var(--ink);text-align:center}
   .hide{display:none}
 </style></head>
 <body>
@@ -69,18 +75,34 @@
     </div>
   </div>
   <div id="idle" class="idle hide">nessun blocco attivo</div>
+  <div id="notif" class="hide">
+    <div class="nemoji" id="n-emoji">🍅</div>
+    <div class="ntitle" id="n-title">—</div>
+    <div class="nsub" id="n-sub"></div>
+    <button class="b nok" id="nok">Ho capito</button>
+  </div>
 </div>
 <script>
 (function(){
   var T=window.__TAURI__, ev=T&&T.event;
   var st={active:false,idx:0,total:0,task:'',path:'',endTs:0,totalSec:1,paused:false,remaining:0};
-  var mode='run', pinned=false;
+  var mode='run', pinned=false, notifData=null;
   function $(id){return document.getElementById(id)}
   var box=$('box');
   function p2(x){return(x<10?'0':'')+x}
   function hms(s){s=Math.max(0,Math.floor(s));var h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60;return h+':'+p2(m)+':'+p2(x)}
   function sh(el,on){el.classList.toggle('hide',!on)}
   function render(){
+    if(mode==='notif'){
+      sh($('run'),false);sh($('brk'),false);sh($('idle'),false);sh($('notif'),true);
+      box.classList.remove('brk');
+      $('ey').textContent='promemoria';
+      $('n-emoji').textContent=(notifData&&notifData.emoji)||'🍅';
+      $('n-title').textContent=(notifData&&notifData.title)||'';
+      $('n-sub').textContent=(notifData&&notifData.sub)||'';
+      fit();return;
+    }
+    sh($('notif'),false);
     if(mode==='brk'){sh($('run'),false);sh($('brk'),true);sh($('idle'),false);box.classList.add('brk');fit();return}
     box.classList.remove('brk');
     if(!st.active){sh($('run'),false);sh($('brk'),false);sh($('idle'),true);$('ey').textContent='PIM Tomato';fit();return}
@@ -102,7 +124,10 @@
     $('bar').style.width=pct+'%';
   }
   setInterval(tick,250);
-  if(ev)ev.listen('pt-state',function(e){st=Object.assign(st,e.payload||{});mode='run';render();});
+  if(ev)ev.listen('pt-state',function(e){st=Object.assign(st,e.payload||{});if(mode!=='notif')mode='run';render();});
+  /* notifica dal planner: mostra il box in modalità promemoria (non farla
+     sovrascrivere dai tick del timer finché non premi "Ho capito") */
+  if(ev)ev.listen('pt-notify',function(e){notifData=e.payload||{};mode='notif';render();});
   function act(o){try{ev.emit('pt-timer-action',o)}catch(_){}}
   /* dimensiona la finestra sull'ALTEZZA REALE del box (misurata dal layout)
      + i margini trasparenti che contengono l'ombra: mai tagliata, per qualsiasi
@@ -120,7 +145,8 @@
   $('pau').addEventListener('click',function(){act({a:st.paused?'resume':'pause'})});
   $('byes').addEventListener('click',function(){act({a:'break'});$('brktitle').textContent='Perfetto, a dopo!';$('brkbtns').classList.add('hide')});
   $('bno').addEventListener('click',function(){act({a:'next'});mode='run';render()});
-  $('x').addEventListener('click',function(){act({a:'hide'})});
+  $('nok').addEventListener('click',function(){act({a:'notif-close'});notifData=null;mode='run';render()});
+  $('x').addEventListener('click',function(){if(mode==='notif'){act({a:'notif-close'});notifData=null;mode='run';render();return}act({a:'hide'})});
   $('open').addEventListener('click',function(){act({a:'open'})});
   $('pin').addEventListener('click',function(){pinned=!pinned;$('pin').classList.toggle('on',pinned);$('pin').title=pinned?'Sfissa (torna sotto la barra dei menu)':'Fissa in alto a destra';act({a:'pin',on:pinned})});
   render();
