@@ -87,6 +87,11 @@ fn show_timer(app: &tauri::AppHandle) {
 /// sopra tutto. Non ruba il focus (così puoi continuare a lavorare).
 fn show_notif_box(app: &tauri::AppHandle, payload: &str) {
     NOTIF_ACTIVE.store(true, Ordering::SeqCst);
+    // suono di notifica (macOS): affidabile anche a finestra nascosta,
+    // indipendente dallo stato audio del webview
+    let _ = std::process::Command::new("afplay")
+        .arg("/System/Library/Sounds/Glass.aiff")
+        .spawn();
     if let Some(w) = app.get_webview_window("timer") {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(payload) {
             let _ = w.emit_to("timer", "pt-notify", v);
