@@ -198,6 +198,34 @@ pub fn run() {
                 }
             });
 
+            // ── SPLASH di avvio: la finestra principale parte NASCOSTA (visible:false).
+            // Mostro prima una schermata locale (bg dark SUBITO → niente flash bianco),
+            // con logo SolitonAI + i messaggi. Il planner, appena carica, emette
+            // "planner-ready"; la splash saluta e poi emette "splash-done" → apro l'app.
+            let _splash = WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
+                .title("PIM Tomato")
+                .inner_size(1400.0, 920.0)
+                .min_inner_size(760.0, 560.0)
+                .center()
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true)
+                .build()?;
+
+            let h_done = app.handle().clone();
+            app.listen("splash-done", move |_event| {
+                if let Some(m) = h_done.get_webview_window("main") { let _ = m.show(); let _ = m.set_focus(); }
+                if let Some(s) = h_done.get_webview_window("splash") { let _ = s.close(); }
+            });
+            // rete di sicurezza: se qualcosa va storto, apri comunque dopo 12s
+            let h_fb = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(12));
+                if h_fb.get_webview_window("splash").is_some() {
+                    if let Some(m) = h_fb.get_webview_window("main") { let _ = m.show(); let _ = m.set_focus(); }
+                    if let Some(s) = h_fb.get_webview_window("splash") { let _ = s.close(); }
+                }
+            });
+
             // Finestrella-timer staccata (senza bordi, trasparente). Di default
             // NON fissata: vive sotto la barra dei menu e si nasconde su blur.
             let timer_win = WebviewWindowBuilder::new(app, "timer", WebviewUrl::App("timer.html".into()))
