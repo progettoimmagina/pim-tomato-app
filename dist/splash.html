@@ -7,57 +7,60 @@
   @font-face{font-family:Metropolis;font-weight:900;src:url("fonts/Metropolis-Black.woff2") format("woff2")}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%;overflow:hidden;-webkit-user-select:none;user-select:none}
-  /* bg dark SUBITO, prima di qualsiasi altra cosa → niente schermata bianca */
+  /* bg dark SUBITO → niente schermata bianca */
   body{
     background:linear-gradient(135deg,#0e0d0c 0%,#070605 100%);
     font-family:Metropolis,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    display:flex;align-items:center;justify-content:center;
-    color:#fff;
+    color:#fff;position:relative;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
   }
-  /* alone cyan ambientale, morbido */
   body::before{content:"";position:fixed;top:-20%;left:-10%;width:60%;height:70%;
     background:radial-gradient(circle,rgba(0,255,227,.10),transparent 70%);pointer-events:none}
-  .wrap{display:flex;flex-direction:column;align-items:center;gap:34px;position:relative;text-align:center;padding:0 40px}
-  .logo{width:min(300px,54vw);opacity:0;transform:translateY(10px) scale(.985);
+  /* CENTRO: titolo PIM Tomato + messaggio */
+  .center{display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center;padding:0 40px;position:relative}
+  .brand{display:flex;align-items:center;gap:16px;opacity:0;transform:translateY(10px) scale(.99);
     transition:opacity .7s cubic-bezier(.2,.6,.2,1),transform .7s cubic-bezier(.2,.6,.2,1)}
-  .logo.in{opacity:1;transform:none}
+  .brand.in{opacity:1;transform:none}
+  .dot{width:18px;height:18px;border-radius:50%;background:#00ffe3;box-shadow:0 0 22px rgba(0,255,227,.85);flex:0 0 18px}
+  .title{font-weight:900;font-size:clamp(38px,6vw,58px);letter-spacing:-.02em;line-height:1}
   .status{min-height:24px;font-weight:500;font-size:15px;letter-spacing:.01em;color:rgba(255,255,255,.72);
     opacity:0;transform:translateY(6px);transition:opacity .45s ease,transform .45s ease}
   .status.in{opacity:1;transform:none}
   .status .bye{font-weight:700;color:#fff}
-  /* puntini animati "sincronizzazione" */
   .dots::after{content:"";animation:dots 1.4s steps(4,end) infinite}
   @keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}100%{content:""}}
+  /* SolitonAI piccolo, centrato IN BASSO */
+  .soliton{position:absolute;left:0;right:0;bottom:46px;margin:0 auto;width:128px;opacity:0;transition:opacity .8s ease .3s}
+  .soliton.in{opacity:.82}
 </style></head>
 <body>
-  <div class="wrap">
-    <img class="logo" id="logo" src="solitonai.svg" alt="SolitonAI">
+  <div class="center">
+    <div class="brand" id="brand"><span class="dot"></span><span class="title">PIM Tomato</span></div>
     <div class="status" id="st"></div>
   </div>
+  <img class="soliton" id="soliton" src="solitonai.svg" alt="SolitonAI">
 <script>
 (function(){
   var T=window.__TAURI__, ev=T&&T.event;
   var start=Date.now(), revealed=false;
   var st=document.getElementById('st');
   function setText(h){st.innerHTML=h}
-  /* 1) logo SolitonAI in dissolvenza */
-  setTimeout(function(){document.getElementById('logo').classList.add('in')},60);
+  /* 1) titolo PIM Tomato + logo SolitonAI in basso, in dissolvenza */
+  setTimeout(function(){document.getElementById('brand').classList.add('in')},60);
+  setTimeout(function(){document.getElementById('soliton').classList.add('in')},420);
   /* 2) messaggio di sincronizzazione (resta finché il planner non è pronto) */
-  setTimeout(function(){setText('Tomato si sta sincronizzando con ClickUp<span class="dots"></span>');st.classList.add('in')},780);
+  setTimeout(function(){setText('Tomato si sta sincronizzando con ClickUp<span class="dots"></span>');st.classList.add('in')},820);
 
   function goodbye(){
     if(revealed)return;revealed=true;
     st.classList.remove('in');
     setTimeout(function(){setText('<span class="bye">Tomato ti saluta 🍅</span>');st.classList.add('in')},220);
-    /* dopo il saluto → apri l'app */
     setTimeout(function(){try{ev&&ev.emit('splash-done')}catch(e){}},1250);
   }
-  /* il planner è caricato → saluta (ma tieni visibile "sincronizzando" almeno ~1,9s) */
   if(ev)ev.listen('planner-ready',function(){
     var wait=Math.max(0,1900-(Date.now()-start));
     setTimeout(goodbye,wait);
   });
-  /* rete di sicurezza: se non arriva il segnale entro 9s, apri comunque */
   setTimeout(function(){if(!revealed)goodbye()},9000);
 })();
 </script>
