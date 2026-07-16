@@ -112,6 +112,10 @@
       $('n-sub').textContent=(notifData&&notifData.sub)||'';
       var ask=!!(notifData&&notifData.ask);
       sh($('nok'),!ask);$('nask').classList.toggle('hide',!ask);
+      if(ask){ /* etichette personalizzabili dal planner (es. "Oh caxxo!" / "Sono in pausa ☕️") */
+        $('nyes').textContent=(notifData&&notifData.yesLabel)||'▶ sì, avvia';
+        $('nno').textContent=(notifData&&notifData.noLabel)||'no';
+      }
       fit();return;
     }
     sh($('notif'),false);

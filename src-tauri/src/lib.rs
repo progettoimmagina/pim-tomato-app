@@ -415,16 +415,13 @@ pub fn run() {
                             }
                         }
                         Some("notif-yes") => {
-                            // "sì" a una domanda del box (es. "Avviare il timer?"):
-                            // inoltro il comando al planner e NON nascondo il box —
-                            // tra un attimo diventa il timer che parte (pt-state).
+                            // "sì" a una domanda del box (es. "Oh caxxo!"): APRO il
+                            // planner (lì compare il modale giusto) e inoltro il comando.
                             NOTIF_ACTIVE.store(false, Ordering::SeqCst);
                             if let Some(w) = h_act.get_webview_window("timer") {
                                 let _ = w.set_always_on_top(PINNED.load(Ordering::SeqCst));
-                                if main_visible(&h_act) {
-                                    let _ = w.hide();
-                                }
                             }
+                            show_main(&h_act); // apre l'app e nasconde il box
                             let _ = h_act.emit_to("main", "pt-notif-yes", v.clone());
                         }
                         Some("hide") => {
