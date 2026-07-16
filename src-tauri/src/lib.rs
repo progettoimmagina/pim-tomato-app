@@ -221,6 +221,41 @@ pub fn run() {
                 }
             });
 
+            // Aggiornamenti MENTRE l'app è aperta: controllo periodico (ogni 2 ore).
+            // Se c'è una versione nuova NON installo in silenzio: avviso il planner
+            // (evento "pt-update") che mostra il modale "aggiorna ↻".
+            let up_loop = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(2 * 3600));
+                let h = up_loop.clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri_plugin_updater::UpdaterExt;
+                    if let Ok(updater) = h.updater() {
+                        if let Ok(Some(update)) = updater.check().await {
+                            let _ = h.emit_to("main", "pt-update", serde_json::json!({ "version": update.version }));
+                        }
+                    }
+                });
+            });
+
+            // Clic su "aggiorna" nel modale → scarica, installa e riavvia da solo.
+            let h_upgo = app.handle().clone();
+            app.listen("pt-update-go", move |_event| {
+                let h = h_upgo.clone();
+                tauri::async_runtime::spawn(async move {
+                    use tauri_plugin_updater::UpdaterExt;
+                    if let Ok(updater) = h.updater() {
+                        if let Ok(Some(update)) = updater.check().await {
+                            if update.download_and_install(|_, _| {}, || {}).await.is_ok() {
+                                h.restart();
+                            }
+                        }
+                    }
+                    /* se siamo ancora qui, qualcosa è andato storto */
+                    let _ = h.emit_to("main", "pt-update-fail", serde_json::json!({}));
+                });
+            });
+
             // ── SPLASH di avvio: la finestra principale parte NASCOSTA (visible:false).
             // Mostro prima una schermata locale (bg dark SUBITO → niente flash bianco),
             // con logo SolitonAI + i messaggi. Il planner, appena carica, emette
