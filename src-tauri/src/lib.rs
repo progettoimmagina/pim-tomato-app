@@ -19,6 +19,21 @@ static SUPPRESS_BLUR: AtomicBool = AtomicBool::new(false);
 /// C'è una NOTIFICA (promemoria) a schermo nel box: in tal caso il box non va
 /// nascosto dai normali segnali del timer finché l'utente non fa "Ho capito".
 static NOTIF_ACTIVE: AtomicBool = AtomicBool::new(false);
+/// Preferenza suono notifiche (per-macchina, inviata dal planner via pt-app).
+static SOUND_ON: AtomicBool = AtomicBool::new(true);
+static SOUND_NAME: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Suona il suono di notifica scelto (macOS, suoni di sistema).
+fn play_notif_sound(force: bool) {
+    if !force && !SOUND_ON.load(Ordering::SeqCst) {
+        return;
+    }
+    let name = SOUND_NAME.lock().ok().map(|g| g.clone()).unwrap_or_default();
+    let name = if name.is_empty() { "Glass".to_string() } else { name };
+    let _ = std::process::Command::new("afplay")
+        .arg(format!("/System/Library/Sounds/{}.aiff", name))
+        .spawn();
+}
 
 /// Mostra e mette a fuoco la finestra principale del planner.
 /// Aprendo il planner, il box-timer in alto a destra sparisce (si usa la barra
@@ -88,10 +103,8 @@ fn show_timer(app: &tauri::AppHandle) {
 fn show_notif_box(app: &tauri::AppHandle, payload: &str) {
     NOTIF_ACTIVE.store(true, Ordering::SeqCst);
     // suono di notifica (macOS): affidabile anche a finestra nascosta,
-    // indipendente dallo stato audio del webview
-    let _ = std::process::Command::new("afplay")
-        .arg("/System/Library/Sounds/Glass.aiff")
-        .spawn();
+    // indipendente dallo stato audio del webview; rispetta la preferenza utente
+    play_notif_sound(false);
     if let Some(w) = app.get_webview_window("timer") {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(payload) {
             let _ = w.emit_to("timer", "pt-notify", v);
@@ -129,6 +142,16 @@ fn apply_pt(app: &tauri::AppHandle, payload: &str) {
         Ok(v) => v,
         Err(_) => return,
     };
+    /* preferenza suono notifiche (on/off + quale suono di sistema) */
+    if let Some(s) = v.get("sound").and_then(|x| x.as_bool()) {
+        SOUND_ON.store(s, Ordering::SeqCst);
+    }
+    if let Some(n) = v.get("soundName").and_then(|x| x.as_str()) {
+        let clean: String = n.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+        if let Ok(mut g) = SOUND_NAME.lock() {
+            *g = clean;
+        }
+    }
     let box_vis = app
         .get_webview_window("timer")
         .and_then(|w| w.is_visible().ok())
@@ -293,6 +316,11 @@ pub fn run() {
             let h_notif = app.handle().clone();
             app.listen("pt-notif", move |event| {
                 show_notif_box(&h_notif, event.payload());
+            });
+
+            // Anteprima suono dalle Impostazioni ("clicca un nome per provarlo")
+            app.listen("pt-sound-test", move |_event| {
+                play_notif_sound(true);
             });
 
             // PONTE planner → finestrella-timer. NB: l'evento RILANCIATO ha nome
