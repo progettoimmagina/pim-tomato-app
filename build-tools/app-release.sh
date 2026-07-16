@@ -35,6 +35,23 @@ TARGZ="src-tauri/target/release/bundle/macos/PIM Tomato.app.tar.gz"
 DMG="src-tauri/target/release/bundle/dmg/PIM Tomato_${VER}_aarch64.dmg"
 cp "$TARGZ" "$DIST/pim-tomato_${VER}_aarch64.app.tar.gz"
 cp "$DMG"   "$DIST/PIM-Tomato_${VER}_aarch64.dmg"
+
+# 4b) installer .pkg per la distribuzione ai dipendenti (l'Installer di macOS
+# scrive i file SENZA flag quarantena -> niente "app danneggiata")
+PKGTMP="$(mktemp -d)"; mkdir -p "$PKGTMP/root/Applications" "$PKGTMP/scripts"
+ditto "src-tauri/target/release/bundle/macos/PIM Tomato.app" "$PKGTMP/root/Applications/PIM Tomato.app"
+codesign --force --deep -s - "$PKGTMP/root/Applications/PIM Tomato.app" 2>/dev/null
+printf '#!/bin/sh\nxattr -cr "/Applications/PIM Tomato.app" 2>/dev/null || true\nexit 0\n' > "$PKGTMP/scripts/postinstall"
+chmod +x "$PKGTMP/scripts/postinstall"
+pkgbuild --analyze --root "$PKGTMP/root" "$PKGTMP/component.plist" >/dev/null
+/usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$PKGTMP/component.plist"
+pkgbuild --root "$PKGTMP/root" --scripts "$PKGTMP/scripts" --component-plist "$PKGTMP/component.plist" \
+  --identifier com.progettoimmagina.pimtomato.pkg --version "$VER" --install-location / \
+  "$PKGTMP/component.pkg" >/dev/null
+productbuild --package "$PKGTMP/component.pkg" "$DIST/Installa-PIM-Tomato_${VER}.pkg" >/dev/null
+cp "$DIST/Installa-PIM-Tomato_${VER}.pkg" "$APP/Installa PIM Tomato ${VER}.pkg"
+rm -rf "$PKGTMP"
+echo "  ✓ installer .pkg pronto"
 SIG="$(cat "$TARGZ.sig")"
 PUB="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 cat > "$DIST/latest.json" <<JSON
@@ -64,5 +81,6 @@ echo "  ✓ push + tag"
 gh release create "v$VER" --repo "$REPO" --title "$TITLE" --notes "$TITLE" \
   "$DIST/pim-tomato_${VER}_aarch64.app.tar.gz" \
   "$DIST/latest.json" \
-  "$DIST/PIM-Tomato_${VER}_aarch64.dmg"
+  "$DIST/PIM-Tomato_${VER}_aarch64.dmg" \
+  "$DIST/Installa-PIM-Tomato_${VER}.pkg"
 echo "✓ Release app v$VER pubblicata — le app installate si aggiorneranno da sole al prossimo avvio."

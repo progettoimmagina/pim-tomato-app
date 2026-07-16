@@ -44,6 +44,12 @@
   .ntitle{font-weight:800;font-size:17px;color:#fff}
   .nsub{font-size:12px;color:var(--mut);margin-top:4px}
   .nok{display:block;width:100%;margin-top:12px;background:var(--cyan);color:var(--ink);text-align:center}
+  /* domanda sì/no (es. "Avviare il timer?") */
+  .nask{display:flex;gap:8px;margin-top:12px}
+  .nask.hide{display:none}
+  .nyes{flex:1.4;background:var(--cyan);color:var(--ink)}
+  .nno{flex:1;background:rgba(255,255,255,.10);color:#fff}
+  .nno:hover{background:rgba(255,255,255,.2)}
   .hide{display:none}
 </style></head>
 <body>
@@ -80,6 +86,10 @@
     <div class="ntitle" id="n-title">—</div>
     <div class="nsub" id="n-sub"></div>
     <button class="b nok" id="nok">Ho capito</button>
+    <div class="nask hide" id="nask">
+      <button class="b nyes" id="nyes">▶ sì, avvia</button>
+      <button class="b nno" id="nno">no</button>
+    </div>
   </div>
 </div>
 <script>
@@ -100,6 +110,8 @@
       $('n-emoji').textContent=(notifData&&notifData.emoji)||'🍅';
       $('n-title').textContent=(notifData&&notifData.title)||'';
       $('n-sub').textContent=(notifData&&notifData.sub)||'';
+      var ask=!!(notifData&&notifData.ask);
+      sh($('nok'),!ask);$('nask').classList.toggle('hide',!ask);
       fit();return;
     }
     sh($('notif'),false);
@@ -146,6 +158,9 @@
   $('byes').addEventListener('click',function(){act({a:'break'});$('brktitle').textContent='Perfetto, a dopo!';$('brkbtns').classList.add('hide')});
   $('bno').addEventListener('click',function(){act({a:'next'});mode='run';render()});
   $('nok').addEventListener('click',function(){act({a:'notif-close'});notifData=null;mode='run';render()});
+  /* domanda sì/no: "sì" → il comando arriva al planner (es. avvia il timer) */
+  $('nyes').addEventListener('click',function(){act({a:'notif-yes',cmd:(notifData&&notifData.cmd)||''});notifData=null;mode='run';render()});
+  $('nno').addEventListener('click',function(){act({a:'notif-close'});notifData=null;mode='run';render()});
   $('x').addEventListener('click',function(){if(mode==='notif'){act({a:'notif-close'});notifData=null;mode='run';render();return}act({a:'hide'})});
   $('open').addEventListener('click',function(){act({a:'open'})});
   $('pin').addEventListener('click',function(){pinned=!pinned;$('pin').classList.toggle('on',pinned);$('pin').title=pinned?'Sfissa (torna sotto la barra dei menu)':'Fissa in alto a destra';act({a:'pin',on:pinned})});

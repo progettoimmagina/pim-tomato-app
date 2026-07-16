@@ -62,9 +62,12 @@ fn place_timer(win: &tauri::WebviewWindow) {
         let sf = mon.scale_factor();
         let lw = sz.width as f64 / sf;
         // il box ha 16px di margine sopra: alzo la finestra così il box resta
-        // dove stava; il margine trasparente attorno serve a NON tagliare l'ombra
+        // dove stava; il margine trasparente attorno serve a NON tagliare l'ombra.
+        // Spostato a SINISTRA della corsia delle notifiche macOS (~380px, non
+        // riposizionabili da app): il box resta in alto, i banner Mac scivolano
+        // alla sua destra, MAI sovrapposti (richiesta Niccolò 2026-07-16).
         let y = if PINNED.load(Ordering::SeqCst) { 24.0 } else { 12.0 };
-        let _ = win.set_position(tauri::LogicalPosition::new(lw - 334.0 + 6.0, y));
+        let _ = win.set_position(tauri::LogicalPosition::new(lw - 334.0 + 6.0 - 380.0, y));
     }
 }
 
@@ -410,6 +413,19 @@ pub fn run() {
                                     let _ = w.hide();
                                 }
                             }
+                        }
+                        Some("notif-yes") => {
+                            // "sì" a una domanda del box (es. "Avviare il timer?"):
+                            // inoltro il comando al planner e NON nascondo il box —
+                            // tra un attimo diventa il timer che parte (pt-state).
+                            NOTIF_ACTIVE.store(false, Ordering::SeqCst);
+                            if let Some(w) = h_act.get_webview_window("timer") {
+                                let _ = w.set_always_on_top(PINNED.load(Ordering::SeqCst));
+                                if main_visible(&h_act) {
+                                    let _ = w.hide();
+                                }
+                            }
+                            let _ = h_act.emit_to("main", "pt-notif-yes", v.clone());
                         }
                         Some("hide") => {
                             if let Some(w) = h_act.get_webview_window("timer") { let _ = w.hide(); }
