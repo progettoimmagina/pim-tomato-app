@@ -305,7 +305,12 @@ pub fn run() {
             let tw_blur = timer_win.clone();
             timer_win.on_window_event(move |event| {
                 if let tauri::WindowEvent::Focused(false) = event {
-                    if !PINNED.load(Ordering::SeqCst) && !SUPPRESS_BLUR.load(Ordering::SeqCst) {
+                    // una NOTIFICA resta FISSA finché non ci clicchi qualcosa:
+                    // non si nasconde cliccando altrove (richiesta Niccolò).
+                    if !PINNED.load(Ordering::SeqCst)
+                        && !SUPPRESS_BLUR.load(Ordering::SeqCst)
+                        && !NOTIF_ACTIVE.load(Ordering::SeqCst)
+                    {
                         let _ = tw_blur.hide();
                     }
                 }
