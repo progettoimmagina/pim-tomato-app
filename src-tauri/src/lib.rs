@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem},
@@ -22,6 +22,25 @@ static NOTIF_ACTIVE: AtomicBool = AtomicBool::new(false);
 /// Preferenza suono notifiche (per-macchina, inviata dal planner via pt-app).
 static SOUND_ON: AtomicBool = AtomicBool::new(true);
 static SOUND_NAME: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
+
+/// Conto alla rovescia del tray gestito DALL'APP (1s nativo), non dal JS del
+/// planner: quando il planner è in secondo piano il suo timer è throttlato e il
+/// tray saltava di 2s. Statici alimentati dagli eventi pt-timer.
+static TRAY_END_MS: AtomicI64 = AtomicI64::new(0); // fine blocco corrente (epoch ms)
+static TRAY_PAUSED: AtomicBool = AtomicBool::new(false);
+static TRAY_PAUSED_REM: AtomicI64 = AtomicI64::new(0); // secondi rimasti se in pausa
+static TRAY_ON: AtomicBool = AtomicBool::new(true); // preferenza "mostra conto nel menu"
+
+/// Formatta i secondi come il planner: h:mm:ss oppure m:ss.
+fn fmt_tray(sec: i64) -> String {
+    let s = sec.max(0);
+    let (h, m, x) = (s / 3600, (s % 3600) / 60, s % 60);
+    if h > 0 {
+        format!("{}:{:02}:{:02}", h, m, x)
+    } else {
+        format!("{}:{:02}", m, x)
+    }
+}
 
 /// Suona il suono di notifica scelto (macOS, suoni di sistema).
 fn play_notif_sound(force: bool) {
@@ -241,6 +260,43 @@ pub fn run() {
                 });
             });
 
+            // Conto alla rovescia del tray calcolato DALL'APP ogni secondo: quando
+            // il planner è in secondo piano il suo timer JS è throttlato e il tray
+            // saltava di 2s. Qui è sempre a 1s (nativo), coerente col box.
+            let tray_loop = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if !WAS_ACTIVE.load(Ordering::SeqCst) || !TRAY_ON.load(Ordering::SeqCst) {
+                    continue;
+                }
+                let h = tray_loop.clone();
+                let _ = h.clone().run_on_main_thread(move || {
+                    if !WAS_ACTIVE.load(Ordering::SeqCst) || !TRAY_ON.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    // box visibile → il conto lo mostra il box, non il tray
+                    let box_vis = h
+                        .get_webview_window("timer")
+                        .and_then(|w| w.is_visible().ok())
+                        .unwrap_or(false);
+                    if box_vis {
+                        return;
+                    }
+                    let sec = if TRAY_PAUSED.load(Ordering::SeqCst) {
+                        TRAY_PAUSED_REM.load(Ordering::SeqCst)
+                    } else {
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis() as i64)
+                            .unwrap_or(0);
+                        (TRAY_END_MS.load(Ordering::SeqCst) - now_ms) / 1000
+                    };
+                    if let Some(tray) = h.tray_by_id("tray") {
+                        let _ = tray.set_title(Some(fmt_tray(sec)));
+                    }
+                });
+            });
+
             // Clic su "aggiorna" nel modale → scarica, installa e riavvia da solo.
             let h_upgo = app.handle().clone();
             app.listen("pt-update-go", move |_event| {
@@ -374,6 +430,19 @@ pub fn run() {
             app.listen("pt-timer", move |event| {
                 if let Ok(v) = serde_json::from_str::<serde_json::Value>(event.payload()) {
                     let active = v.get("active").and_then(|x| x.as_bool()).unwrap_or(false);
+                    // stato per il conto alla rovescia del tray gestito dall'app (1s)
+                    if active {
+                        let end_ts = v.get("endTs").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                        let rem = v.get("remaining").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                        let paused = v.get("paused").and_then(|x| x.as_bool()).unwrap_or(false);
+                        let tray_on = v.get("tray").and_then(|x| x.as_bool()).unwrap_or(true);
+                        TRAY_END_MS.store((end_ts * 1000.0) as i64, Ordering::SeqCst);
+                        TRAY_PAUSED.store(paused, Ordering::SeqCst);
+                        TRAY_PAUSED_REM.store(rem as i64, Ordering::SeqCst);
+                        TRAY_ON.store(tray_on, Ordering::SeqCst);
+                    } else {
+                        TRAY_ON.store(false, Ordering::SeqCst);
+                    }
                     if active {
                         if !WAS_ACTIVE.swap(true, Ordering::SeqCst) {
                             show_timer(&h_timer);
