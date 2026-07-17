@@ -2,7 +2,7 @@
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PIM Tomato — Timer</title>
 <style>
-  :root{--bg:#1f1e1d;--cyan:#00ffe3;--ink:#0c3b37;--mut:rgba(255,255,255,.55)}
+  :root{--bg:#1f1e1d;--cyan:#00ffe3;--ink:#062b27;--mut:rgba(255,255,255,.55);--grad:linear-gradient(135deg,#008987 0%,#00ffe3 100%)}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
   html,body{background:transparent;font-family:-apple-system,"Metropolis",Segoe UI,sans-serif;overflow:hidden}
   #box{position:relative;width:290px;margin:16px 22px 30px 22px;border-radius:15px;padding:10px 12px 11px;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.28);
@@ -28,8 +28,9 @@
   .paused .clock{color:var(--mut)}
   .skip{align-self:flex-start;font-size:9px;font-weight:800;color:#f0b330;background:rgba(240,179,48,.16);border-radius:6px;padding:2px 6px;font-variant-numeric:tabular-nums}
   #box.brk .skip{color:#8a5a00;background:rgba(12,59,55,.12)}
-  .b{border:none;border-radius:9px;font-weight:800;font-size:12px;cursor:pointer;padding:8px 12px;white-space:nowrap}
-  .fin{background:var(--cyan);color:var(--ink)}
+  .b{border:none;border-radius:11px;font-weight:800;font-size:12px;cursor:pointer;padding:9px 12px;white-space:nowrap;transition:transform .08s,box-shadow .12s,background .12s}
+  .fin{background:var(--grad);color:var(--ink)}
+  .fin:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,255,227,.22)}
   .pau{background:rgba(255,255,255,.12);color:#fff;padding:8px 9px;display:flex;align-items:center}
   .pau svg{width:13px;height:13px;display:block}
   .track{height:4px;border-radius:4px;background:rgba(255,255,255,.12);margin-top:9px;overflow:hidden}
@@ -43,24 +44,26 @@
   .nemoji{font-size:30px;line-height:1;margin:4px 0 8px}
   .ntitle{font-weight:800;font-size:17px;color:#fff}
   .nsub{font-size:12px;color:var(--mut);margin-top:4px}
-  .nok{display:block;width:100%;margin-top:12px;background:var(--cyan);color:var(--ink);text-align:center}
+  .nok{display:block;width:100%;margin-top:12px;background:var(--grad);color:var(--ink);text-align:center}
+  .nok:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,255,227,.22)}
   /* domanda sì/no (es. "Avviare il timer?") */
   .nask{display:flex;gap:8px;margin-top:12px}
   .nask.hide{display:none}
-  .nyes{flex:1.4;background:var(--cyan);color:var(--ink)}
-  .nno{flex:1;background:rgba(255,255,255,.10);color:#fff}
-  .nno:hover{background:rgba(255,255,255,.2)}
+  .nyes{flex:1.4;background:var(--grad);color:var(--ink)}
+  .nyes:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,255,227,.22)}
+  .nno{flex:1;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.12)}
+  .nno:hover{background:rgba(255,255,255,.14)}
   /* rimanda: link discreto e centrato sotto le azioni, niente box pesante */
   .nsnooze-open{display:block;margin:11px auto 1px;background:transparent;border:0;color:var(--mut);font-size:11.5px;font-weight:700;padding:3px 8px;cursor:pointer;opacity:.85;transition:color .12s,opacity .12s}
   .nsnooze-open:hover{color:var(--cyan);opacity:1}
-  /* seconda pagina: scelta del tempo */
+  /* seconda pagina: scelta del tempo — pulsanti stile Soliton (scuri, gradient cyan all'hover) */
   #nsnooze{padding:2px 2px 2px}
-  .nsnooze-t{font-size:13px;font-weight:800;color:#fff;text-align:center;margin-bottom:11px}
+  .nsnooze-t{font-size:14px;font-weight:800;color:#fff;text-align:center;margin-bottom:12px}
   .nsnooze-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .nsn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);color:#fff;border-radius:11px;font-weight:700;font-size:12px;padding:11px 6px;cursor:pointer;transition:background .12s,border-color .12s,transform .08s}
-  .nsn:hover{background:var(--cyan);border-color:var(--cyan);color:var(--ink);transform:translateY(-1px)}
-  .nsnooze-back{display:block;margin:11px auto 1px;background:transparent;border:0;color:var(--mut);font-size:11.5px;font-weight:700;padding:3px 8px;cursor:pointer;transition:color .12s}
-  .nsnooze-back:hover{color:#fff}
+  .nsn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);color:#fff;border-radius:12px;font-weight:700;font-size:12.5px;line-height:1.2;padding:12px 6px;cursor:pointer;transition:background .14s,border-color .14s,color .14s,transform .08s,box-shadow .14s}
+  .nsn:hover{background:var(--grad);border-color:transparent;color:var(--ink);transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,255,227,.2)}
+  .nsnooze-back{display:block;margin:12px auto 1px;background:transparent;border:0;color:var(--mut);font-size:11.5px;font-weight:700;padding:3px 8px;cursor:pointer;transition:color .12s}
+  .nsnooze-back:hover{color:var(--cyan)}
   .hide{display:none}
 </style></head>
 <body>
