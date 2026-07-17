@@ -50,6 +50,16 @@
   .nyes{flex:1.4;background:var(--cyan);color:var(--ink)}
   .nno{flex:1;background:rgba(255,255,255,.10);color:#fff}
   .nno:hover{background:rgba(255,255,255,.2)}
+  /* rimanda */
+  .nsnooze-open{display:block;width:100%;margin-top:8px;background:transparent;color:var(--mut);font-size:11px;font-weight:700;padding:6px}
+  .nsnooze-open:hover{color:#fff}
+  #nsnooze{text-align:center;padding:4px 2px 2px}
+  .nsnooze-t{margin-bottom:10px}
+  .nsnooze-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .nsn{background:rgba(255,255,255,.08);color:#fff;border-radius:9px;font-weight:700;font-size:12px;padding:10px 6px;cursor:pointer}
+  .nsn:hover{background:var(--cyan);color:var(--ink)}
+  .nsnooze-back{display:block;width:100%;margin-top:9px;background:transparent;color:var(--mut);font-size:11px;font-weight:700;padding:6px}
+  .nsnooze-back:hover{color:#fff}
   .hide{display:none}
 </style></head>
 <body>
@@ -90,13 +100,27 @@
       <button class="b nyes" id="nyes">▶ sì, avvia</button>
       <button class="b nno" id="nno">no</button>
     </div>
+    <button class="nsnooze-open" id="nsnooze-open">rimanda ⏰</button>
+  </div>
+  <!-- seconda pagina del box: scelta del tempo di rinvio -->
+  <div id="nsnooze" class="hide">
+    <div class="ntitle nsnooze-t">Rimanda a…</div>
+    <div class="nsnooze-grid">
+      <button class="nsn" data-min="10">10 minuti</button>
+      <button class="nsn" data-min="30">30 minuti</button>
+      <button class="nsn" data-min="60">1 ora</button>
+      <button class="nsn" data-min="120">2 ore</button>
+      <button class="nsn" data-when="morning">domani mattina</button>
+      <button class="nsn" data-when="afternoon">domani pomeriggio</button>
+    </div>
+    <button class="nsnooze-back" id="nsnooze-back">‹ indietro</button>
   </div>
 </div>
 <script>
 (function(){
   var T=window.__TAURI__, ev=T&&T.event;
   var st={active:false,idx:0,total:0,task:'',path:'',endTs:0,totalSec:1,paused:false,remaining:0};
-  var mode='run', pinned=false, notifData=null;
+  var mode='run', pinned=false, notifData=null, snoozing=false;
   function $(id){return document.getElementById(id)}
   var box=$('box');
   function p2(x){return(x<10?'0':'')+x}
@@ -104,21 +128,25 @@
   function sh(el,on){el.classList.toggle('hide',!on)}
   function render(){
     if(mode==='notif'){
-      sh($('run'),false);sh($('brk'),false);sh($('idle'),false);sh($('notif'),true);
+      sh($('run'),false);sh($('brk'),false);sh($('idle'),false);
       box.classList.remove('brk');
       $('ey').textContent='promemoria';
-      $('n-emoji').textContent=(notifData&&notifData.emoji)||'🍅';
-      $('n-title').textContent=(notifData&&notifData.title)||'';
-      $('n-sub').textContent=(notifData&&notifData.sub)||'';
-      var ask=!!(notifData&&notifData.ask);
-      sh($('nok'),!ask);$('nask').classList.toggle('hide',!ask);
-      if(ask){ /* etichette personalizzabili dal planner (es. "Oh caxxo!" / "Sono in pausa ☕️") */
-        $('nyes').textContent=(notifData&&notifData.yesLabel)||'▶ sì, avvia';
-        $('nno').textContent=(notifData&&notifData.noLabel)||'no';
+      /* seconda pagina: scelta del tempo di rinvio */
+      sh($('notif'),!snoozing);sh($('nsnooze'),snoozing);
+      if(!snoozing){
+        $('n-emoji').textContent=(notifData&&notifData.emoji)||'🍅';
+        $('n-title').textContent=(notifData&&notifData.title)||'';
+        $('n-sub').textContent=(notifData&&notifData.sub)||'';
+        var ask=!!(notifData&&notifData.ask);
+        sh($('nok'),!ask);$('nask').classList.toggle('hide',!ask);
+        if(ask){ /* etichette personalizzabili dal planner (es. "Oh caxxo!" / "Sono in pausa ☕️") */
+          $('nyes').textContent=(notifData&&notifData.yesLabel)||'▶ sì, avvia';
+          $('nno').textContent=(notifData&&notifData.noLabel)||'no';
+        }
       }
       fit();return;
     }
-    sh($('notif'),false);
+    sh($('notif'),false);sh($('nsnooze'),false);
     if(mode==='brk'){sh($('run'),false);sh($('brk'),true);sh($('idle'),false);box.classList.add('brk');fit();return}
     box.classList.remove('brk');
     if(!st.active){sh($('run'),false);sh($('brk'),false);sh($('idle'),true);$('ey').textContent='PIM Tomato';fit();return}
@@ -165,7 +193,21 @@
   /* domanda sì/no: "sì" → il comando arriva al planner (es. avvia il timer) */
   $('nyes').addEventListener('click',function(){act({a:'notif-yes',cmd:(notifData&&notifData.cmd)||''});notifData=null;mode='run';render()});
   $('nno').addEventListener('click',function(){act({a:'notif-close'});notifData=null;mode='run';render()});
-  $('x').addEventListener('click',function(){if(mode==='notif'){act({a:'notif-close'});notifData=null;mode='run';render();return}act({a:'hide'})});
+  /* rimanda: apre la pagina di scelta del tempo */
+  $('nsnooze-open').addEventListener('click',function(){snoozing=true;render()});
+  $('nsnooze-back').addEventListener('click',function(){snoozing=false;render()});
+  /* secondi fino a domani alle ore H:00 (locale) */
+  function untilTomorrow(h){var d=new Date();d.setDate(d.getDate()+1);d.setHours(h,0,0,0);return Math.max(60,Math.round((d.getTime()-Date.now())/1000))}
+  Array.prototype.forEach.call(document.querySelectorAll('.nsn'),function(b){
+    b.addEventListener('click',function(){
+      var secs;
+      if(b.getAttribute('data-min'))secs=parseInt(b.getAttribute('data-min'),10)*60;
+      else secs=untilTomorrow(b.getAttribute('data-when')==='afternoon'?15:9); /* mattina 9, pomeriggio 15 */
+      act({a:'notif-snooze',secs:secs,data:notifData||{}});
+      notifData=null;snoozing=false;mode='run';render();
+    });
+  });
+  $('x').addEventListener('click',function(){if(mode==='notif'){if(snoozing){snoozing=false;render();return}act({a:'notif-close'});notifData=null;mode='run';render();return}act({a:'hide'})});
   $('open').addEventListener('click',function(){act({a:'open'})});
   $('pin').addEventListener('click',function(){pinned=!pinned;$('pin').classList.toggle('on',pinned);$('pin').title=pinned?'Sfissa (torna sotto la barra dei menu)':'Fissa in alto a destra';act({a:'pin',on:pinned})});
   render();
