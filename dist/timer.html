@@ -196,7 +196,18 @@
   $('nok').addEventListener('click',function(){act({a:'notif-close'});notifData=null;mode='run';render()});
   /* domanda sì/no: "sì" → il comando arriva al planner (es. avvia il timer) */
   $('nyes').addEventListener('click',function(){act({a:'notif-yes',cmd:(notifData&&notifData.cmd)||''});notifData=null;mode='run';render()});
-  $('nno').addEventListener('click',function(){act({a:'notif-close'});notifData=null;mode='run';render()});
+  $('nno').addEventListener('click',function(){
+    /* "Sono in pausa" del promemoria (cmd nudge): risposta rilassata + ricompare
+       tra 10' se ancora fermo. Per le altre domande (es. avvia timer) = chiudi. */
+    if(notifData&&notifData.cmd==='nudge'){
+      var d=notifData;
+      $('n-emoji').textContent='🧘🏼‍♀️';$('n-title').textContent='ooook';$('n-sub').textContent='';
+      $('nask').classList.add('hide');sh($('nok'),false);$('nsnooze-open').style.display='none';
+      setTimeout(function(){act({a:'notif-pause',data:d||{}});notifData=null;mode='run';render()},1200);
+      return;
+    }
+    act({a:'notif-close'});notifData=null;mode='run';render();
+  });
   /* rimanda: apre la pagina di scelta del tempo */
   $('nsnooze-open').addEventListener('click',function(){snoozing=true;render()});
   $('nsnooze-back').addEventListener('click',function(){snoozing=false;render()});
