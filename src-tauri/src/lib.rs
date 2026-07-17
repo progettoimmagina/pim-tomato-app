@@ -136,6 +136,18 @@ fn show_notif_box(app: &tauri::AppHandle, payload: &str) {
         if !w.is_visible().unwrap_or(false) {
             let _ = w.show();
         }
+        // Una NOTIFICA vuole una decisione: le do il focus così il PRIMO clic su
+        // un bottone compie l'azione (prima il primo clic serviva solo ad
+        // attivare la finestra e ne serviva un secondo). SUPPRESS_BLUR evita che
+        // il giro focus/blur la richiuda subito.
+        SUPPRESS_BLUR.store(true, Ordering::SeqCst);
+        let _ = w.set_focus();
+        let h_sb = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            SUPPRESS_BLUR.store(false, Ordering::SeqCst);
+            let _ = h_sb; // handle tenuto vivo per il thread
+        });
     }
 }
 
