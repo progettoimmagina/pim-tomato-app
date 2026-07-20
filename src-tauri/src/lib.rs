@@ -237,16 +237,42 @@ fn open_external(payload: &str) {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Canale di aggiornamento: "beta" (solo la mia app, per test) o "stable" (tutti).
+/// Letto da un file `channel` nella config dir dell'app; default "stable".
+fn update_channel(app: &tauri::AppHandle) -> String {
+    if let Ok(dir) = app.path().app_config_dir() {
+        if let Ok(s) = std::fs::read_to_string(dir.join("channel")) {
+            if s.trim().eq_ignore_ascii_case("beta") {
+                return "beta".into();
+            }
+        }
+    }
+    "stable".into()
+}
+
+/// Updater col endpoint del canale giusto (beta = manifest dedicato aggiornato a
+/// ogni release; stable = GitHub "latest", che riceve solo dopo il via ufficiale).
+fn channel_updater(app: &tauri::AppHandle) -> Option<tauri_plugin_updater::Updater> {
+    use tauri_plugin_updater::UpdaterExt;
+    let url = if update_channel(app) == "beta" {
+        "https://github.com/progettoimmagina/pim-tomato-app/releases/download/manifest-beta/latest.json"
+    } else {
+        "https://github.com/progettoimmagina/pim-tomato-app/releases/latest/download/latest.json"
+    };
+    let u = tauri::Url::parse(url).ok()?;
+    app.updater_builder().endpoints(vec![u]).ok()?.build().ok()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
-            // Auto-update all'avvio: controlla, scarica, installa e riavvia (silenzioso).
+            // Auto-update all'avvio: controlla (sul canale giusto), scarica,
+            // installa e riavvia (silenzioso).
             let up_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                use tauri_plugin_updater::UpdaterExt;
-                if let Ok(updater) = up_handle.updater() {
+                if let Some(updater) = channel_updater(&up_handle) {
                     if let Ok(Some(update)) = updater.check().await {
                         if update.download_and_install(|_, _| {}, || {}).await.is_ok() {
                             up_handle.restart();
@@ -255,16 +281,15 @@ pub fn run() {
                 }
             });
 
-            // Aggiornamenti MENTRE l'app è aperta: controllo periodico (ogni 2 ore).
+            // Aggiornamenti MENTRE l'app è aperta: controllo periodico (ogni ora).
             // Se c'è una versione nuova NON installo in silenzio: avviso il planner
             // (evento "pt-update") che mostra il modale "aggiorna ↻".
             let up_loop = app.handle().clone();
             std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(2 * 3600));
+                std::thread::sleep(std::time::Duration::from_secs(3600));
                 let h = up_loop.clone();
                 tauri::async_runtime::spawn(async move {
-                    use tauri_plugin_updater::UpdaterExt;
-                    if let Ok(updater) = h.updater() {
+                    if let Some(updater) = channel_updater(&h) {
                         if let Ok(Some(update)) = updater.check().await {
                             let _ = h.emit_to("main", "pt-update", serde_json::json!({ "version": update.version }));
                         }
@@ -314,8 +339,7 @@ pub fn run() {
             app.listen("pt-update-go", move |_event| {
                 let h = h_upgo.clone();
                 tauri::async_runtime::spawn(async move {
-                    use tauri_plugin_updater::UpdaterExt;
-                    if let Ok(updater) = h.updater() {
+                    if let Some(updater) = channel_updater(&h) {
                         if let Ok(Some(update)) = updater.check().await {
                             if update.download_and_install(|_, _| {}, || {}).await.is_ok() {
                                 h.restart();

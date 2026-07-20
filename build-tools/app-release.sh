@@ -41,7 +41,16 @@ cp "$DMG"   "$DIST/PIM-Tomato_${VER}_aarch64.dmg"
 PKGTMP="$(mktemp -d)"; mkdir -p "$PKGTMP/root/Applications" "$PKGTMP/scripts"
 ditto "src-tauri/target/release/bundle/macos/PIM Tomato.app" "$PKGTMP/root/Applications/PIM Tomato.app"
 codesign --force --deep -s - "$PKGTMP/root/Applications/PIM Tomato.app" 2>/dev/null
-printf '#!/bin/sh\nxattr -cr "/Applications/PIM Tomato.app" 2>/dev/null || true\nexit 0\n' > "$PKGTMP/scripts/postinstall"
+cat > "$PKGTMP/scripts/postinstall" <<'POST'
+#!/bin/sh
+APP="/Applications/PIM Tomato.app"
+xattr -cr "$APP" 2>/dev/null || true
+# l'app deve appartenere all'UTENTE (non a root) altrimenti l'auto-update
+# non riesce a sovrascriversi da sola. La do all'utente loggato.
+u="$(stat -f%Su /dev/console 2>/dev/null)"
+[ -n "$u" ] && [ "$u" != "root" ] && chown -R "$u" "$APP" 2>/dev/null || true
+exit 0
+POST
 chmod +x "$PKGTMP/scripts/postinstall"
 pkgbuild --analyze --root "$PKGTMP/root" "$PKGTMP/component.plist" >/dev/null
 /usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$PKGTMP/component.plist"
@@ -77,10 +86,17 @@ git push -q origin main
 git push -q origin "v$VER"
 echo "  ✓ push + tag"
 
-# 6) GitHub release (l'endpoint updater legge /releases/latest/download/latest.json)
-gh release create "v$VER" --repo "$REPO" --title "$TITLE" --notes "$TITLE" \
+# 6) GitHub release come PRERELEASE: i DIPENDENTI (canale stable = GitHub
+#    "latest") NON la ricevono finché non la promuovi. La tua app (canale beta)
+#    la prende subito dal manifest-beta.
+gh release create "v$VER" --repo "$REPO" --title "$TITLE" --notes "$TITLE" --prerelease \
   "$DIST/pim-tomato_${VER}_aarch64.app.tar.gz" \
   "$DIST/latest.json" \
   "$DIST/PIM-Tomato_${VER}_aarch64.dmg" \
   "$DIST/Installa-PIM-Tomato_${VER}.pkg"
-echo "✓ Release app v$VER pubblicata — le app installate si aggiorneranno da sole al prossimo avvio."
+
+# 7) CANALE BETA (solo la mia app): aggiorno il manifest dedicato → la tua app
+#    si aggiorna subito, i dipendenti no.
+gh release upload manifest-beta "$DIST/latest.json" --repo "$REPO" --clobber
+echo "✓ v$VER pubblicata sul canale BETA (solo la TUA app la riceve)."
+echo "  Per l'UFFICIALE (anche i dipendenti):  ./build-tools/app-promote.sh $VER"
