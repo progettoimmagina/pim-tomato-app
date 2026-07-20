@@ -70,6 +70,7 @@
 <div id="box">
   <div class="top" data-tauri-drag-region>
     <span class="ey" id="ey">—</span>
+    <button class="hbtn hide" id="nmute" title="Silenzia i promemoria per oggi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.6 13A8.4 8.4 0 0 0 18 10a6 6 0 0 0-8-5.7"/><path d="M6 8a6 6 0 0 0-.4 2c0 5-2.6 6-2.6 6h13"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/><path d="M3 3l18 18"/></svg></button>
     <button class="hbtn" id="pin" title="Fissa in alto a destra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.8V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v5.8l1.7 2A1 1 0 0 1 16.9 14H7.1a1 1 0 0 1-.8-1.2z"/></svg></button>
     <button class="hbtn" id="open" title="Apri il planner"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7"/><path d="M8 7h9v9"/></svg></button>
     <button class="hbtn" id="x" title="Chiudi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -137,6 +138,8 @@
       $('ey').textContent='promemoria';
       /* seconda pagina: scelta del tempo di rinvio */
       sh($('notif'),!snoozing);sh($('nsnooze'),snoozing);
+      /* icona "silenzia per oggi": solo sui promemoria e solo per l'admin */
+      sh($('nmute'),!snoozing&&!!(notifData&&notifData.mute));
       if(!snoozing){
         $('n-emoji').textContent=(notifData&&notifData.emoji)||'🍅';
         $('n-title').textContent=(notifData&&notifData.title)||'';
@@ -150,7 +153,7 @@
       }
       fit();return;
     }
-    sh($('notif'),false);sh($('nsnooze'),false);
+    sh($('notif'),false);sh($('nsnooze'),false);sh($('nmute'),false);
     if(mode==='brk'){sh($('run'),false);sh($('brk'),true);sh($('idle'),false);box.classList.add('brk');fit();return}
     box.classList.remove('brk');
     if(!st.active){sh($('run'),false);sh($('brk'),false);sh($('idle'),true);$('ey').textContent='PIM Tomato';fit();return}
@@ -225,6 +228,14 @@
   $('x').addEventListener('click',function(){if(mode==='notif'){if(snoozing){snoozing=false;render();return}act({a:'notif-close'});notifData=null;mode='run';render();return}act({a:'hide'})});
   $('open').addEventListener('click',function(){act({a:'open'})});
   $('pin').addEventListener('click',function(){pinned=!pinned;$('pin').classList.toggle('on',pinned);$('pin').title=pinned?'Sfissa (torna sotto la barra dei menu)':'Fissa in alto a destra';act({a:'pin',on:pinned})});
+  /* "silenzia per oggi": dico al planner di non mandare più promemoria oggi,
+     poi conferma breve e chiudo il box. */
+  $('nmute').addEventListener('click',function(){
+    act({a:'notif-mute-day'});
+    $('n-emoji').textContent='🔕';$('n-title').textContent='Promemoria in pausa per oggi';$('n-sub').textContent='';
+    $('nask').classList.add('hide');sh($('nok'),false);$('nsnooze-open').style.display='none';sh($('nmute'),false);fit();
+    setTimeout(function(){act({a:'notif-close'});notifData=null;mode='run';$('nsnooze-open').style.display='';render()},1200);
+  });
   render();
 })();
 </script>
