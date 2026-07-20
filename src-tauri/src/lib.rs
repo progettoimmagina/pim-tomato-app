@@ -281,12 +281,12 @@ pub fn run() {
                 }
             });
 
-            // Aggiornamenti MENTRE l'app è aperta: controllo periodico (ogni ora).
+            // Aggiornamenti MENTRE l'app è aperta: controllo periodico (ogni 15 min).
             // Se c'è una versione nuova NON installo in silenzio: avviso il planner
             // (evento "pt-update") che mostra il modale "aggiorna ↻".
             let up_loop = app.handle().clone();
             std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(3600));
+                std::thread::sleep(std::time::Duration::from_secs(900));
                 let h = up_loop.clone();
                 tauri::async_runtime::spawn(async move {
                     if let Some(updater) = channel_updater(&h) {
