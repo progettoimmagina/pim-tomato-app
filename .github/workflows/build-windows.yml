@@ -33,10 +33,17 @@ jobs:
         run: npm i -D @tauri-apps/cli@^2
 
       - name: Build NSIS installer
+        shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npx tauri build --bundles nsis
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
+            Write-Host "ATTENZIONE: secret firma assente - installer SENZA auto-update"
+            npx tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          } else {
+            npx tauri build --bundles nsis
+          }
 
       - name: Upload installer to release + merge manifest
         shell: pwsh
@@ -47,10 +54,14 @@ jobs:
           $ErrorActionPreference = "Stop"
           $bundle = "src-tauri/target/release/bundle/nsis"
           $exe = Get-ChildItem "$bundle/*-setup.exe" | Select-Object -First 1
-          $sig = Get-ChildItem "$bundle/*-setup.exe.sig" | Select-Object -First 1
-          if (-not $exe -or -not $sig) { throw "installer o firma mancanti in $bundle" }
+          $sig = Get-ChildItem "$bundle/*-setup.exe.sig" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "installer mancante in $bundle" }
 
-          # nome asset stabile e prevedibile
+          if (-not $sig) {
+            # niente firma: carico solo l'installer, manifest invariato
+            gh release upload $env:TAG $exe.FullName --clobber
+            exit 0
+          }
           gh release upload $env:TAG $exe.FullName $sig.FullName --clobber
 
           # manifest: aggiungi windows-x86_64 al latest.json della release
