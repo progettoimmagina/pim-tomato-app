@@ -50,7 +50,9 @@ jobs:
         run: |
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             Write-Host "ATTENZIONE: secret firma assente - installer SENZA auto-update"
-            npx tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+            # config via FILE: passare JSON inline a npx su Windows perde le virgolette
+            Set-Content -Path nosign.json -Value '{"bundle":{"createUpdaterArtifacts":false}}'
+            npx tauri build --bundles nsis --config nosign.json
           } else {
             npx tauri build --bundles nsis
           }
