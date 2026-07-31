@@ -49,9 +49,20 @@ fn play_notif_sound(force: bool) {
     }
     let name = SOUND_NAME.lock().ok().map(|g| g.clone()).unwrap_or_default();
     let name = if name.is_empty() { "Glass".to_string() } else { name };
-    let _ = std::process::Command::new("afplay")
-        .arg(format!("/System/Library/Sounds/{}.aiff", name))
-        .spawn();
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("afplay")
+            .arg(format!("/System/Library/Sounds/{}.aiff", name))
+            .spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = name; // su Windows i suoni di sistema non hanno nomi macOS
+        let _ = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command",
+                "[System.Media.SystemSounds]::Asterisk.Play()"])
+            .spawn();
+    }
 }
 
 /// Mostra e mette a fuoco la finestra principale del planner.
@@ -220,19 +231,30 @@ fn open_external(payload: &str) {
         Some(u) if !u.is_empty() => u.to_string(),
         _ => return,
     };
-    if let Some(rest) = url.strip_prefix("https://app.clickup.com/") {
-        let deep = format!("clickup://{}", rest);
-        let opened = std::process::Command::new("open")
-            .arg(&deep)
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
-        if opened {
-            return;
+    #[cfg(target_os = "macos")]
+    {
+        if let Some(rest) = url.strip_prefix("https://app.clickup.com/") {
+            let deep = format!("clickup://{}", rest);
+            let opened = std::process::Command::new("open")
+                .arg(&deep)
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if opened {
+                return;
+            }
+            let _ = std::process::Command::new("open").arg(&url).status(); // fallback browser
+        } else {
+            let _ = std::process::Command::new("open").arg(&url).status();
         }
-        let _ = std::process::Command::new("open").arg(&url).status(); // fallback browser
-    } else {
-        let _ = std::process::Command::new("open").arg(&url).status();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        /* niente tentativo clickup:// qui: se il protocollo non è registrato
+           Windows mostra un errore a video. Il browser fa comunque da ponte. */
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", url.as_str()])
+            .spawn();
     }
 }
 

@@ -1,0 +1,72 @@
+# Build Windows di PIM Tomato — stessa app del Mac, installer .exe (NSIS).
+# Da macOS non si può cross-compilare Tauri per Windows: questa build gira su
+# un runner Windows di GitHub. Si lancia a mano (workflow_dispatch) indicando
+# il tag di una release già esistente: l'exe firmato per l'updater viene
+# caricato su QUELLA release e il manifest latest.json viene arricchito con
+# la piattaforma windows-x86_64 (l'auto-update funziona anche su PC).
+name: build-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag della release (es. v0.2.32)"
+        required: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Tauri CLI
+        run: npm i -D @tauri-apps/cli@^2
+
+      - name: Build NSIS installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: npx tauri build --bundles nsis
+
+      - name: Upload installer to release + merge manifest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $bundle = "src-tauri/target/release/bundle/nsis"
+          $exe = Get-ChildItem "$bundle/*-setup.exe" | Select-Object -First 1
+          $sig = Get-ChildItem "$bundle/*-setup.exe.sig" | Select-Object -First 1
+          if (-not $exe -or -not $sig) { throw "installer o firma mancanti in $bundle" }
+
+          # nome asset stabile e prevedibile
+          gh release upload $env:TAG $exe.FullName $sig.FullName --clobber
+
+          # manifest: aggiungi windows-x86_64 al latest.json della release
+          gh release download $env:TAG --pattern latest.json --output latest.json
+          $m = Get-Content latest.json -Raw | ConvertFrom-Json
+          $sigTxt = (Get-Content $sig.FullName -Raw).Trim()
+          $encName = [uri]::EscapeDataString($exe.Name)
+          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/$encName"
+          if (-not $m.platforms) { throw "latest.json senza platforms" }
+          $win = [pscustomobject]@{ signature = $sigTxt; url = $url }
+          $m.platforms | Add-Member -Name "windows-x86_64" -Value $win -MemberType NoteProperty -Force
+          $m | ConvertTo-Json -Depth 6 | Set-Content latest.json -Encoding UTF8
+          gh release upload $env:TAG latest.json --clobber
+
+          # se la release ospita anche il manifest beta, allinealo
+          $isPre = gh release view $env:TAG --json isPrerelease -q .isPrerelease
+          if ($isPre -eq "true") {
+            gh release upload manifest-beta latest.json --clobber
+          }
