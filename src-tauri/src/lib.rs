@@ -377,14 +377,17 @@ pub fn run() {
             // Mostro prima una schermata locale (bg dark SUBITO → niente flash bianco),
             // con logo SolitonAI + i messaggi. Il planner, appena carica, emette
             // "planner-ready"; la splash saluta e poi emette "splash-done" → apro l'app.
-            let _splash = WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
+            let splash_b = WebviewWindowBuilder::new(app, "splash", WebviewUrl::App("splash.html".into()))
                 .title("PIM Tomato")
                 .inner_size(1400.0, 920.0)
                 .min_inner_size(760.0, 560.0)
-                .center()
+                .center();
+            // barra del titolo "invisibile": API solo macOS (su Windows resta la barra standard)
+            #[cfg(target_os = "macos")]
+            let splash_b = splash_b
                 .title_bar_style(tauri::TitleBarStyle::Overlay)
-                .hidden_title(true)
-                .build()?;
+                .hidden_title(true);
+            let _splash = splash_b.build()?;
 
             let h_done = app.handle().clone();
             app.listen("splash-done", move |_event| {
@@ -631,8 +634,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("errore nell'avvio di PIM Tomato")
         .run(|app, event| {
+            // Reopen (click sul Dock) esiste solo su macOS
+            #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 show_main(app);
             }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, &event);
         });
 }
