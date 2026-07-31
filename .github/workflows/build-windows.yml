@@ -48,6 +48,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: |
+          # la chiave e' base64 su UNA riga: ripulisco eventuali spazi/a-capo
+          # introdotti dall'incolla nel form di GitHub
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            $env:TAURI_SIGNING_PRIVATE_KEY = $env:TAURI_SIGNING_PRIVATE_KEY -replace '\s',''
+          }
           if ([string]::IsNullOrWhiteSpace($env:TAURI_SIGNING_PRIVATE_KEY)) {
             Write-Host "ATTENZIONE: secret firma assente - installer SENZA auto-update"
             # config via FILE: passare JSON inline a npx su Windows perde le virgolette
