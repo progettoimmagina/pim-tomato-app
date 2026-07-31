@@ -12,6 +12,8 @@ on:
       tag:
         description: "Tag della release (es. v0.2.32)"
         required: true
+  push:
+    tags: ["v*", "winbuild-*"]
 
 jobs:
   windows:
@@ -21,7 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Resolve release tag
+        shell: pwsh
+        run: |
+          $t = "${{ github.event.inputs.tag }}"
+          if ([string]::IsNullOrWhiteSpace($t)) { $t = "${{ github.ref_name }}" }
+          if ($t.StartsWith("winbuild-")) { $t = "v" + $t.Substring(9) }
+          "TAG=$t" | Out-File -Append $env:GITHUB_ENV
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -49,7 +59,6 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.inputs.tag }}
         run: |
           $ErrorActionPreference = "Stop"
           $bundle = "src-tauri/target/release/bundle/nsis"
