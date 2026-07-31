@@ -84,8 +84,10 @@ jobs:
           gh release download $env:TAG --pattern latest.json --output latest.json
           $m = Get-Content latest.json -Raw | ConvertFrom-Json
           $sigTxt = (Get-Content $sig.FullName -Raw).Trim()
-          $encName = [uri]::EscapeDataString($exe.Name)
-          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/$encName"
+          # GitHub rinomina gli asset sostituendo gli spazi con punti:
+          # l'URL va costruito sul nome REALE dell'asset, non sul file locale
+          $assetName = gh release view $env:TAG --json assets -q '.assets[].name' | Where-Object { $_ -like '*x64-setup.exe' } | Select-Object -First 1
+          $url = "https://github.com/${{ github.repository }}/releases/download/$env:TAG/$assetName"
           if (-not $m.platforms) { throw "latest.json senza platforms" }
           $win = [pscustomobject]@{ signature = $sigTxt; url = $url }
           $m.platforms | Add-Member -Name "windows-x86_64" -Value $win -MemberType NoteProperty -Force
