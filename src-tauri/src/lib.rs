@@ -290,6 +290,53 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
+            // ── Finestra principale: costruita QUI (non in config) per avere il
+            // GUARDIANO DI NAVIGAZIONE. L'app deve mostrare SOLO Tomato, sempre:
+            // qualsiasi altra pagina (Hub compreso, o redirect post-login) viene
+            // bloccata e la finestra torna al planner. ──
+            let nav_h = app.handle().clone();
+            let main_b = WebviewWindowBuilder::new(
+                app,
+                "main",
+                WebviewUrl::External("https://studio.progettoimmagina.com/planner/".parse().unwrap()),
+            )
+            .title("PIM Tomato")
+            .inner_size(1400.0, 920.0)
+            .min_inner_size(760.0, 560.0)
+            .center()
+            .visible(false)
+            .on_navigation(move |url| {
+                let host = url.host_str().unwrap_or("");
+                let scheme = url.scheme();
+                // pagine interne dell'app (tauri://, about:blank durante i redirect)
+                if scheme == "tauri" || scheme == "about" || host.is_empty() {
+                    return true;
+                }
+                let allowed = host == "studio.progettoimmagina.com" && {
+                    let p = url.path();
+                    p.starts_with("/planner")            // tutte le pagine Tomato
+                        || p.starts_with("/login")        // login Tomato
+                        || p.starts_with("/wp-login.php") // login WordPress (sessione scaduta)
+                        || p.starts_with("/pt-sw.js")
+                };
+                if !allowed {
+                    // riporto al planner con un attimo di respiro (mai dentro la callback)
+                    let h = nav_h.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_millis(200));
+                        if let Some(w) = h.get_webview_window("main") {
+                            let _ = w.eval("window.location.replace('https://studio.progettoimmagina.com/planner/')");
+                        }
+                    });
+                }
+                allowed
+            });
+            #[cfg(target_os = "macos")]
+            let main_b = main_b
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
+            main_b.build()?;
+
             // Auto-update all'avvio: controlla (sul canale giusto), scarica,
             // installa e riavvia (silenzioso).
             let up_handle = app.handle().clone();

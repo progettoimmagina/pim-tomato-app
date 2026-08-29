@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "PIM Tomato",
-  "version": "0.2.32",
+  "version": "0.2.33",
   "identifier": "com.progettoimmagina.pimtomato",
   "build": {
     "frontendDist": "../dist"
@@ -9,21 +9,7 @@
   "app": {
     "withGlobalTauri": true,
     "macOSPrivateApi": true,
-    "windows": [
-      {
-        "label": "main",
-        "title": "PIM Tomato",
-        "url": "https://studio.progettoimmagina.com/planner/",
-        "width": 1400,
-        "height": 920,
-        "minWidth": 760,
-        "minHeight": 560,
-        "center": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
-        "visible": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }
@@ -31,7 +17,10 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["dmg", "app"],
+    "targets": [
+      "dmg",
+      "app"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,7 +31,9 @@
   },
   "plugins": {
     "updater": {
-      "endpoints": ["https://github.com/progettoimmagina/pim-tomato-app/releases/latest/download/latest.json"],
+      "endpoints": [
+        "https://github.com/progettoimmagina/pim-tomato-app/releases/latest/download/latest.json"
+      ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY4MzdDQTk0NTI2ODUxRDAKUldUUVVXaFNsTW8zK0pDcHNiUkdwK3RTZU5GZUJ5UlVYQVVhc1dDc014d0N0NDFNOUdPNVo4dFIK"
     }
   }
